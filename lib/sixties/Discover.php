@@ -18,28 +18,29 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @package   Sixties
  * @category  Library
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
+ * @package   Sixties
  * @author    Clochix <clochix@clochix.net>
  * @copyright 2009 Clochix.net
- */
-
-require_once $libs . '/vendors/xmpphp/XMPPHP/XMPP.php';
-
-/**
- * Discover : implement client-side XEP 0030 : service discovery
- *
- * @package   Sixties
- * @category  Library
  * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @version   $Id$
+ * @link      https://labo.clochix.net/projects/show/sixties
  */
+
 require_once dirname(__FILE__) . "/Xep.php";
 
-class Discover extends Xep{
+/**
+ * XepDiscover : implement client-side XEP 0030 : service discovery
+ *
+ * @category  Library
+ * @package   Sixties
+ * @author    Clochix <clochix@clochix.net>
+ * @copyright 2009 Clochix.net
+ * @license   http://www.gnu.org/licenses/gpl.txt GPL
+ * @version   $Id$
+ * @link      https://labo.clochix.net/projects/show/sixties
+ */
+class XepDiscover extends Xep
+{
     public $items;
     public $infos;
 
@@ -62,22 +63,20 @@ class Discover extends Xep{
      * @param string $server to get items on a specific server
      * @param string $node   to get items on a specific node
      *
-     * @return : mixed : FALSE or integer
+     * @return XepDiscover $this
      */
     public function discoverItems($server=null, $node = null) {
         if (is_null($server)) $server = $this->conn->getHost();
         if (!is_null($node)) $node = "node='$node'";
-        return $this->conn->sendIq(array(
-                'to' => $server,
-                'msg'=>"<query xmlns='http://jabber.org/protocol/disco#items' $node />"
-                ));
+        $this->conn->sendIq(array('to' => $server,'msg'=>"<query xmlns='http://jabber.org/protocol/disco#items' $node />"));
+        return $this;
     }
 
     /**
      * Add an item to internal item list
      *
-     * @param object $item
-     * @param array &$items
+     * @param object $item   the current item
+     * @param array  &$items the array of items to update
      *
      * @return void
      */
@@ -94,11 +93,12 @@ class Discover extends Xep{
     /**
      * Handle items response
      *
-     * @param XMLObj $xml
+     * @param XMPPHP_XMLObj $xml the result
      *
      * @return void
      */
-    public function handlerItems($xml) {
+    public function handlerItems(XMPPHP_XMLObj $xml) {
+        $this->conn->history($xml);
         try {
             $status = "result";
             $xmlitems = $xml->sub('query');
@@ -107,7 +107,7 @@ class Discover extends Xep{
             if ($xmlitems->attrs['node']) {
                 $root = $xmlitems->attrs['from'];
                 $node = $xmlitems->attrs['node'];
-                foreach($xmlitems->subs as $item) {
+                foreach ($xmlitems->subs as $item) {
                     if ($item->name == 'item') {
                         $this->_handleQuery($item, $this->items[$root]['nodes'][$node]);
                     } else {
@@ -115,7 +115,7 @@ class Discover extends Xep{
                     }
                 }
             } else {
-                foreach($xmlitems->subs as $item) {
+                foreach ($xmlitems->subs as $item) {
                     if ($item->name == 'item') {
                         $this->_handleQuery($item, $this->items);
                     } else {
@@ -140,22 +140,23 @@ class Discover extends Xep{
      * @param string $server to get items on a specific server
      * @param string $node   to get items on a specific node
      *
-     * @return : mixed : FALSE or integer
+     * @return XepDiscover $this
      */
     public function discoverInfo($server = null, $node = null) {
         if (is_null($server)) $server = $this->conn->getHost();
         if (!is_null($node)) $node = "node='$node'";
-        return $this->conn->sendIq(array('to'=>$server, 'msg'=>"<query xmlns='http://jabber.org/protocol/disco#info' $node />"));
+        $this->conn->sendIq(array('to'=>$server, 'msg'=>"<query xmlns='http://jabber.org/protocol/disco#info' $node />"));
+        return $this;
     }
     /**
      * Handle infos response
      *
-     * @param XMLObj $xml
+     * @param XMPPHP_XMLObj $xml the result
      *
      * @return void
      */
-    public function handlerInfo($xml) {
+    public function handlerInfo(XMPPHP_XMLObj $xml) {
+        $this->conn->history($xml);
         //@TODO implement this !
-        $this->log("Réceptions des infos de {$xml->attrs['from']}", XMPPHP_Log::LEVEL_WARNING);
     }
 }

@@ -18,26 +18,29 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @package   Sixties
  * @category  Library
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
+ * @package   Sixties
  * @author    Clochix <clochix@clochix.net>
  * @copyright 2009 Clochix.net
+ * @license   http://www.gnu.org/licenses/gpl.txt GPL
+ * @link      https://labo.clochix.net/projects/show/sixties
  */
 
-require_once dirname(__FILE__) . "/XMPP2.php";
+require_once dirname(__FILE__) . '/XMPP2.php';
 
 /**
  * Xep : parent class for all XEP
  *
- * @package   Sixties
  * @category  Library
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
+ * @package   Sixties
  * @author    Clochix <clochix@clochix.net>
  * @copyright 2009 Clochix.net
+ * @license   http://www.gnu.org/licenses/gpl.txt GPL
  * @version   $Id$
+ * @link      https://labo.clochix.net/projects/show/sixties
  */
-class Xep {
+class Xep
+{
     /**
      * @var XMPPHP_XMPP conn : the current connection
      */
@@ -45,7 +48,7 @@ class Xep {
     /**
      * Create object and register handlers
      *
-     * @param XMPP2  $conn the connexion
+     * @param XMPP2 $conn the connexion
      *
      * @return void
      */
