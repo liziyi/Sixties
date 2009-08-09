@@ -41,8 +41,15 @@ require_once dirname(__FILE__) . "/Xep.php";
  */
 class XepDiscover extends Xep
 {
-    public $items;
-    public $infos;
+
+    /**
+     * @const event on info result
+     */
+    const EVENT_INFO  = 'discover_info_handled';
+    /**
+     * @const event on items result
+     */
+    const EVENT_ITEMS = 'discover_items_handled';
 
     /**
      * Create object and register handlers
@@ -55,83 +62,6 @@ class XepDiscover extends Xep
         parent::__construct($conn);
         $this->conn->addXPathHandler('iq/{http://jabber.org/protocol/disco#items}query', 'handlerItems', $this);
         $this->conn->addXPathHandler('iq/{http://jabber.org/protocol/disco#info}query', 'handlerInfo', $this);
-    }
-
-    /**
-     * Send a discover items request
-     *
-     * @param string $server to get items on a specific server
-     * @param string $node   to get items on a specific node
-     *
-     * @return XepDiscover $this
-     */
-    public function discoverItems($server=null, $node = null) {
-        if (is_null($server)) $server = $this->conn->getHost();
-        if (!is_null($node)) $node = "node='$node'";
-        $this->conn->sendIq(array('to' => $server,'msg'=>"<query xmlns='http://jabber.org/protocol/disco#items' $node />"));
-        return $this;
-    }
-
-    /**
-     * Add an item to internal item list
-     *
-     * @param object $item   the current item
-     * @param array  &$items the array of items to update
-     *
-     * @return void
-     */
-    private function _handleQuery($item, &$items) {
-        $jid = $item->attrs['jid'];
-        if (!isset($items[$jid])) {
-            $items[$jid] = array('nodes' => array());
-        }
-        if ($item->attrs['node']) {
-            $items[$jid]['nodes'][$item->attrs['node']] = $item->attrs;
-        }
-    }
-
-    /**
-     * Handle items response
-     *
-     * @param XMPPHP_XMLObj $xml the result
-     *
-     * @return void
-     */
-    public function handlerItems(XMPPHP_XMLObj $xml) {
-        $this->conn->history($xml);
-        try {
-            $status = "result";
-            $xmlitems = $xml->sub('query');
-
-            // node level
-            if ($xmlitems->attrs['node']) {
-                $root = $xmlitems->attrs['from'];
-                $node = $xmlitems->attrs['node'];
-                foreach ($xmlitems->subs as $item) {
-                    if ($item->name == 'item') {
-                        $this->_handleQuery($item, $this->items[$root]['nodes'][$node]);
-                    } else {
-                        $status = "error";
-                    }
-                }
-            } else {
-                foreach ($xmlitems->subs as $item) {
-                    if ($item->name == 'item') {
-                        $this->_handleQuery($item, $this->items);
-                    } else {
-                        $status = "error";
-                    }
-                }
-            }
-            if ($status == "result") {
-                $this->log("Ok getting items", XMPPHP_Log::LEVEL_DEBUG);
-            } else {
-                $this->log("Error getting items", XMPPHP_Log::LEVEL_WARNING);
-            }
-        } catch (Exception $e) {
-            $this->log("Error handling items : " . $e->getMessage(), XMPPHP_Log::LEVEL_ERROR);
-        }
-        $this->conn->event('discover_items_handled');
     }
 
     /**
@@ -148,6 +78,52 @@ class XepDiscover extends Xep
         $this->conn->sendIq(array('to'=>$server, 'msg'=>"<query xmlns='http://jabber.org/protocol/disco#info' $node />"));
         return $this;
     }
+
+    /**
+     * Send a discover items request
+     *
+     * @param string $server to get items on a specific server
+     * @param string $node   to get items on a specific node
+     *
+     * @return XepDiscover $this
+     */
+    public function discoverItems($server = null, $node = null) {
+        if (is_null($server)) $server = $this->conn->getHost();
+        if (!is_null($node)) $node = "node='$node'";
+        $this->conn->sendIq(array('to' => $server,'msg'=>"<query xmlns='http://jabber.org/protocol/disco#items' $node />"));
+        return $this;
+    }
+
+    /**
+     * Handle items response
+     *
+     * @param XMPPHP_XMLObj $xml the result
+     *
+     * @return void
+     */
+    public function handlerItems(XMPPHP_XMLObj $xml) {
+        try {
+            $res = $this->commonHandler($xml);
+            if ($res->code != XepResponse::XEPRESPONSE_KO) {
+                $query   = $xml->sub('query');
+                $node    = $xml->attrs['from'] . '!' . $query->attrs['node'];
+                $items   = array($node => array('items'=>array()));
+                foreach ($query->subs as $sub) {
+                    if ($sub->name == 'item') {
+                        $items[$node]['items'][$sub->attrs['jid'] . '!' . $sub->attrs['node']] = array(
+                            'jid'  => $sub->attrs['jid'],
+                            'name' => $sub->attrs['name'],
+                            'node' => $sub->attrs['node']);
+                    }
+                }
+                $res->message = $items;
+            }
+        } catch (Exception $e) {
+            $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
+        }
+        $this->conn->event(self::EVENT_ITEMS, $res);
+    }
+
     /**
      * Handle infos response
      *
@@ -156,7 +132,29 @@ class XepDiscover extends Xep
      * @return void
      */
     public function handlerInfo(XMPPHP_XMLObj $xml) {
-        $this->conn->history($xml);
-        //@TODO implement this !
+        try {
+            $res = $this->commonHandler($xml);
+            if ($res->code != XepResponse::XEPRESPONSE_KO) {
+                $query   = $xml->sub('query');
+                $node    = $xml->attrs['from'] . '!' . $query->attrs['node'];
+                $message = array($node => array('identities'=>array(), 'features'=>array()));
+                foreach ($query->subs as $sub) {
+                    if ($sub->name == 'identity') {
+                        $message[$node]['identities'][] = array(
+                            'category' => $sub->attrs['category'],
+                            'name'     => $sub->attrs['name'],
+                            'type'     => $sub->attrs['type']
+                            );
+                    }
+                    if ($sub->name == 'feature') {
+                        $message[$node]['features'][$sub->attrs['var']] = $sub->attrs['var'];
+                    }
+                }
+                $res->message = $message;
+            }
+        } catch (Exception $e) {
+            $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
+        }
+        $this->conn->event(self::EVENT_INFO, $res);
     }
 }
