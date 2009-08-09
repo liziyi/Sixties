@@ -38,6 +38,8 @@ require_once dirname(__FILE__) . '/XMPP2.php';
  * @license   http://www.gnu.org/licenses/gpl.txt GPL
  * @version   $Id$
  * @link      https://labo.clochix.net/projects/show/sixties
+ *
+ * @TODO : should be abstract ?
  */
 class Xep
 {
@@ -66,5 +68,66 @@ class Xep
      */
     public function log($msg, $runlevel = XMPPHP_Log::LEVEL_INFO) {
         $this->conn->getLog()->log($msg, $runlevel);
+    }
+
+    /**
+     * This method shoulf be called prior handling result.  It handles errors
+     *
+     * @param XMPPHP_XMLObj $xml the result
+     *
+     * @return XepResponse
+     */
+    protected function commonHandler($xml) {
+        $this->conn->history($xml);
+        if ($xml->attrs['type'] == 'error') {
+            $message = array();
+            if ($xml->hasSub('error')) {
+                $error = $xml->sub('error');
+                $query = $xml->sub('query');
+                $message['server']  = $xml->attrs['from'];
+                $message['ns']      = $query->attrs['xmlns'];
+                $message['node']    = $query->attrs['node'];
+                $message['code']    = $error->attrs['code'];
+                $message['type']    = $error->attrs['type'];
+                $message['stanzas'] = array();
+                foreach ($error->subs as $sub) $message['stanzas'][] = $sub->name;
+                $this->log("ERROR : ({$error->attrs['code']}) {$error->attrs['type']} : " . implode(',', $message['stanzas']), XMPPHP_Log::LEVEL_ERROR);
+            }
+            return(new XepResponse($message, XepResponse::XEPRESPONSE_KO));
+        } else {
+            return(new XepResponse());
+        }
+    }
+}
+
+/**
+ * XepResponse : Class for the objects returned by every handler
+ *
+ * @category  Library
+ * @package   Sixties
+ * @author    Clochix <clochix@clochix.net>
+ * @copyright 2009 Clochix.net
+ * @license   http://www.gnu.org/licenses/gpl.txt GPL
+ * @version   $Id$
+ * @link      https://labo.clochix.net/projects/show/sixties
+ */
+class XepResponse
+{
+    public $code;
+    public $message;
+
+    const XEPRESPONSE_OK = 200;
+    const XEPRESPONSE_KO = 500;
+    /**
+     * Constructor
+     *
+     * @param mixed   $message the content of the response
+     * @param integer $code    ok or ko
+     *
+     * @return void
+     */
+    public function __construct($message = '', $code = 200){
+        $this->message = $message;
+        $this->code    = $code;
     }
 }
