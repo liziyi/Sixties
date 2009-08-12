@@ -1,14 +1,19 @@
 <?xml version="1.0" ?>
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:data="jabber:x:data">
     <xsl:output method="html" indent="no" encoding="UTF-8" omit-xml-declaration="yes"/>
+    <xsl:param name="baseid" />
     <xsl:template match="data:x[@type='form']">
-        <form class="form_form">
+        <xsl:element name="form">
+            <xsl:attribute name="class">form_form</xsl:attribute>
+            <xsl:attribute name="id"><xsl:text>form_</xsl:text><xsl:value-of select="$baseid"/></xsl:attribute>
             <xsl:apply-templates select="data:title"/>
             <xsl:apply-templates select="data:instructions"/>
-            <xsl:apply-templates select="data:field"/>
+            <xsl:apply-templates select="data:field">
+                <xsl:with-param name="baseid" select="$baseid" />
+            </xsl:apply-templates>
             <xsl:apply-templates select="data:reported"/>
             <xsl:apply-templates select="data:item"/>
-        </form>
+        </xsl:element>
     </xsl:template>
     <xsl:template match="data:instructions">
         <div class="form_instructions">
@@ -20,16 +25,23 @@
             <xsl:value-of select="."/>
         </div>
     </xsl:template>
+    
     <xsl:template match="data:field">
+        <xsl:param name="baseid" />
         <xsl:variable name="field_name">
             <xsl:value-of select="@var"/>
+        </xsl:variable>
+        <xsl:variable name="field_id">
+            <xsl:text>form_field_</xsl:text><xsl:value-of select="$baseid" />_<xsl:number level="single" count="data:field" format="001" />
         </xsl:variable>
         <xsl:element name="div">
             <xsl:attribute name="class">form_field<xsl:if test="./data:required"> form_field_required</xsl:if> form_field_type_<xsl:value-of select="@type"/></xsl:attribute>
             <xsl:if test="@label!=''">
-                <label class="form_field_label">
+                <xsl:element name="label">
+                    <xsl:attribute name="class">form_field_label</xsl:attribute>
+                    <xsl:attribute name="for"><xsl:value-of select="$field_id"/></xsl:attribute>
                     <xsl:value-of select="@label"/>
-                </label>
+                </xsl:element>
             </xsl:if>
             <xsl:choose>
                 <!-- -=-=-=-=-= BOOLEAN =-=-=-=-=- -->
@@ -40,34 +52,48 @@
                     <xsl:element name="input">
                         <xsl:attribute name="type">radio</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/>_1</xsl:attribute>
                         <xsl:attribute name="value">true</xsl:attribute>
                         <xsl:if test="$field_value='1' or $field_value='true'">
                             <xsl:attribute name="checked">checked</xsl:attribute>
                         </xsl:if>
                     </xsl:element>
-                    <label>true</label>
+                    <xsl:element name="label">
+                        <xsl:attribute name="for"><xsl:value-of select="$field_id"/>_1</xsl:attribute>
+                        <xsl:text>true</xsl:text>
+                    </xsl:element>
                     <xsl:element name="input">
                         <xsl:attribute name="type">radio</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/>_0</xsl:attribute>
                         <xsl:attribute name="value">false</xsl:attribute>
                         <xsl:if test="$field_value='0' or $field_value='false'">
                             <xsl:attribute name="checked">checked</xsl:attribute>
                         </xsl:if>
                     </xsl:element>
-                    <label>false</label>
+                    <!-- 
+                    <xsl:element name="label">
+                        <xsl:attribute name="for"><xsl:value-of select="$field_id"/>_0</xsl:attribute>
+                        <xsl:text>false</xsl:text>
+                    </xsl:element>
                     <xsl:element name="input">
                         <xsl:attribute name="type">radio</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/>_N</xsl:attribute>
                         <xsl:attribute name="value"></xsl:attribute>
                     </xsl:element>
-                    <label>unset</label>
+                    <xsl:element name="label">
+                        <xsl:attribute name="for"><xsl:value-of select="$field_id"/>_N</xsl:attribute>
+                        <xsl:text>?</xsl:text>
+                    </xsl:element>
+                     -->
                 </xsl:when>
                 <!-- -=-=-=-=-= FIXED =-=-=-=-=- -->
                 <xsl:when test="@type='fixed'">
                     <span class="form_field_fixed">
                         <xsl:for-each select="data:value">
                             <xsl:value-of select='.'/>
-                            <xsl:text>&#10;</xsl:text>
+                            <xsl:text></xsl:text>
                         </xsl:for-each>
                     </span>
                 </xsl:when>
@@ -76,6 +102,7 @@
                     <xsl:element name="input">
                         <xsl:attribute name="type">hidden</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/></xsl:attribute>
                         <xsl:attribute name="value">
                             <xsl:value-of select='data:value'/>
                         </xsl:attribute>
@@ -85,13 +112,14 @@
                 <xsl:when test="@type='jid-multi'">
                     <xsl:element name="textarea">
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/></xsl:attribute>
                         <xsl:attribute name="cols">40</xsl:attribute>
                         <xsl:attribute name="rows">10</xsl:attribute>
                         <xsl:for-each select="data:value">
+                            <xsl:if test="position()>1"><xsl:text>&#10;</xsl:text></xsl:if>
                             <xsl:value-of select='.'/>
-                            <xsl:text>&#10;</xsl:text>
                         </xsl:for-each>
-                        <xsl:text>&#10;</xsl:text>
+                        <xsl:text></xsl:text>
                     </xsl:element>
                 </xsl:when>
                 <!-- -=-=-=-=-= JID-SINGLE =-=-=-=-=- -->
@@ -100,6 +128,7 @@
                         <xsl:attribute name="type">text</xsl:attribute>
                         <xsl:attribute name="size">40</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/></xsl:attribute>
                         <xsl:attribute name="value">
                             <xsl:value-of select='data:value'/>
                         </xsl:attribute>
@@ -112,6 +141,7 @@
                     <xsl:element name="select">
                         <xsl:attribute name="multiple">multiple</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/></xsl:attribute>
                         <xsl:for-each select="data:option">
                             <xsl:variable name="field_option_value">
                                 <xsl:for-each select="data:value">
@@ -136,7 +166,7 @@
                             </xsl:element>
                         </xsl:for-each>
                         <xsl:if test="count(data:option)=0">
-                            <xsl:text>&#10;</xsl:text>
+                            <xsl:text></xsl:text>
                         </xsl:if>
                     </xsl:element>
                 </xsl:when>
@@ -149,6 +179,7 @@
                     </xsl:variable>
                     <xsl:element name="select">
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/></xsl:attribute>
                         <xsl:if test="count(data:value)!=1">
                             <option value="" selected="selected"></option>
                         </xsl:if>
@@ -181,14 +212,15 @@
                 <xsl:when test="@type='text-multi'">
                     <xsl:element name="textarea">
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/></xsl:attribute>
                         <xsl:attribute name="cols">40</xsl:attribute>
                         <xsl:attribute name="rows">10</xsl:attribute>
                         <xsl:for-each select="data:value">
+                            <xsl:if test="position()>1"><xsl:text>&#10;</xsl:text></xsl:if>
                             <xsl:value-of select='.'/>
-                            <xsl:text>&#10;</xsl:text>
                         </xsl:for-each>
                         <xsl:if test="count(data:value)=0">
-                            <xsl:text>&#10;</xsl:text>
+                            <xsl:text></xsl:text>
                         </xsl:if>
                     </xsl:element>
                 </xsl:when>
@@ -197,6 +229,7 @@
                     <xsl:element name="input">
                         <xsl:attribute name="type">password</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/></xsl:attribute>
                         <xsl:attribute name="value">
                             <xsl:value-of select="data:value"/>
                         </xsl:attribute>
@@ -208,6 +241,7 @@
                         <xsl:attribute name="type">text</xsl:attribute>
                         <xsl:attribute name="size">40</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/></xsl:attribute>
                         <xsl:attribute name="value">
                             <xsl:value-of select="data:value"/>
                         </xsl:attribute>
