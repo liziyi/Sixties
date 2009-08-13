@@ -53,6 +53,8 @@ class WsXepDisco extends WsXep
      * @param array $params parameters
      *
      * @return XepResponse
+     *
+     * @UrlMap({'server', 'node'})
      */
     public function itemsGet($params) {
         $this->conn->xep('discover')->discoverItems($params['server'], $params['node']);
@@ -69,6 +71,8 @@ class WsXepDisco extends WsXep
      * @param array $params parameters
      *
      * @return XepResponse
+     *
+     * @UrlMap({'server', 'node'   = 'titi'})
      */
     public function infoGet($params) {
         $this->conn->xep('discover')->discoverInfo($params['server'], $params['node']);
@@ -85,6 +89,8 @@ class WsXepDisco extends WsXep
      * @param array $params parameters
      *
      * @return XepResponse
+     *
+     * @UrlMap({'server', 'node'})
      */
     public function servicesGet($params) {
         return($this->_servicesGet($params['server'], $params['node']));
