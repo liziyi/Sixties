@@ -55,8 +55,17 @@ class Xep
      * @return void
      */
     public function __construct(XMPP2 $conn) {
+        static $initialized = false;
         $this->conn = $conn;
+        if (!$initialized) {
+            // Handle errors. Use a static var to prevent this from been called for every Xep object
+            $this->conn->addXPathHandler('iq/error', 'commonHandler', $this);
+            $initialized = true;
+        }
     }
+
+    const EVENT_ERROR = 'xep_event_error';
+    const EVENT_OK    = 'xep_event_ok';
 
     /**
      * Wrapper to logger
@@ -71,13 +80,13 @@ class Xep
     }
 
     /**
-     * This method shoulf be called prior handling result.  It handles errors
+     * This method should be called prior handling result.  It handles errors
      *
      * @param XMPPHP_XMLObj $xml the result
      *
      * @return XepResponse
      */
-    protected function commonHandler($xml) {
+    public function commonHandler($xml) {
         $this->conn->history($xml);
         if ($xml->attrs['type'] == 'error') {
             $message = array();
@@ -93,7 +102,10 @@ class Xep
                 foreach ($error->subs as $sub) $message['stanzas'][] = $sub->name;
                 $this->log("ERROR : ({$error->attrs['code']}) {$error->attrs['type']} : " . implode(',', $message['stanzas']), XMPPHP_Log::LEVEL_ERROR);
             }
-            return(new XepResponse($message, XepResponse::XEPRESPONSE_KO));
+            $res = new XepResponse($message, XepResponse::XEPRESPONSE_KO);
+            // Send an event. Client should use this event to prevent listening forever
+            $this->conn->event(self::EVENT_ERROR, $res);
+            return($res);
         } else {
             return(new XepResponse());
         }
