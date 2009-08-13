@@ -27,11 +27,17 @@
  */
 
 /**
+ * Define a new UrlMap annotation to map parameters in the url with parameters of the method
+ */
+require_once $basepath . '/lib/vendors/addendum/annotations.php';
+class UrlMap extends Annotation {}
+
+/**
  * BbRest : base for RESTful web services
  *
  * @category   Library
  * @package    Sixties
- * @subpackage WebService
+ * @subpackage Rest
  * @author     Clochix <clochix@clochix.net>
  * @copyright  2009 Clochix.net
  * @license    http://www.gnu.org/licenses/gpl.txt GPL
@@ -40,11 +46,14 @@
  */
 class BbRest
 {
-    const HTTP_OK              = 200;
-    const HTTP_BAD_REQUEST     = 400;
-    const HTTP_NOT_FOUND       = 404;
-    const HTTP_INTERNAL        = 500;
-    const HTTP_NOT_IMPLEMENTED = 501;
+    const HTTP_OK                 = 200;
+    const HTTP_BAD_REQUEST        = 400;
+    const HTTP_METHOD_NOT_ALLOWED = 405;
+    const HTTP_NOT_FOUND          = 404;
+    const HTTP_NOT_ACCEPTABLE     = 406;
+    const HTTP_INTERNAL           = 500;
+    const HTTP_NOT_IMPLEMENTED    = 501;
+    const HTTP_UNAVAILABLE        = 503;
 
     /**
      * @var array $_mapping mapping between modules and classes
@@ -81,7 +90,20 @@ class BbRest
                 $this->format = 'json';
                 break;
             }
+            // TODO : should we return HTTP_NOT_ACCEPTABLE if not foud ?
         }
+    }
+
+    /**
+     * Update the current configuration
+     *
+     * @params mixed $config the new configuration
+     *
+     * @return BbRest $this
+     */
+    public function setConfig($config) {
+        $this->_config = $config;
+        return $this;
     }
 
     /**
@@ -93,11 +115,15 @@ class BbRest
         try {
             $request = substr(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), strlen(dirname($_SERVER['PHP_SELF'])) + 1);
             $path    = explode('/', $request);
-            if (count($path) < 1 || count($path) > 2) {
-                $this->renderResponse("Bad Request", self::HTTP_BAD_REQUEST);
-                return false;
+            $method  = ucFirst(strtolower($_SERVER['REQUEST_METHOD']));
+            if (count($path) == 1 && strlen($path[0]) == 0) {
+                if ($method == 'Options') {
+                    // Get the list of available modules
+                    //@TODO : manage security
+                    $this->renderResponse(array_keys($this->_mapping));
+                    return true;
+                }
             }
-            $method = ucFirst(strtolower($_SERVER['REQUEST_METHOD']));
             switch ($method) {
             case 'Get':
                 $args = $_GET;
@@ -112,6 +138,7 @@ class BbRest
                 parse_str(file_get_contents('php://input'), $args);
                 break;
             case 'Options':
+                parse_str(file_get_contents('php://input'), $args);
                 break;
             default:
                 $this->renderResponse("Method $method not implemented", self::HTTP_NOT_IMPLEMENTED);
@@ -119,7 +146,7 @@ class BbRest
                 break;
             }
             if (!isset($this->_mapping[$path[0]])) {
-                $this->renderResponse("Method {$path[0]} not implemented", self::HTTP_NOT_IMPLEMENTED);
+                $this->renderResponse("Module {$path[0]} not implemented", self::HTTP_NOT_IMPLEMENTED);
                 return false;
             }
             $classname = $this->_mapping[$path[0]];
@@ -134,13 +161,40 @@ class BbRest
             if (count($path) == 1) $path[1] = '';
             $methodname = $path[1] . $method;
             if (!in_array($methodname, get_class_methods($classname))) {
-                $this->renderResponse("No action for method $method on this module", self::HTTP_NOT_IMPLEMENTED);
+                $this->renderResponse("No action for method $method on this module", self::HTTP_METHOD_NOT_ALLOWED);
                 return false;
+            }
+
+            // Are there parameters in the URL ? try to map them according to annotations
+            if (count($path) > 2) {
+                $reflection = new ReflectionAnnotatedMethod($classname, $methodname);
+                $urlmap = $reflection->getAnnotation('UrlMap');
+                if ($urlmap) {
+                    if (!is_array($urlmap->value)) $urlmap->value = array($urlmap->value);
+                    foreach ($urlmap->value as $num => $key) {
+                        if (isset($path[$num+2]) && !isset($args[$key])) $args[$key] = $path[$num+2];
+                    }
+                }
             }
 
             // Create the class and call the method
             $class = new $classname($this->_config);
             $res = $class->$methodname($args);
+            //@FIXME : use a more generic class than XepResponse
+            if ($res instanceof XepResponse) {
+                // try to recover on error
+                if ($res->code == self::HTTP_INTERNAL) {
+                    if ($res->message['code'] == self::HTTP_UNAVAILABLE) {
+                        // service unavailable, wait a little and let it a second chance
+                        usleep(1000);
+                        $res = $class->$methodname($args);
+                    }
+                }
+            }
+
+        } catch (WsException $e) {
+            $this->renderResponse($e->getMessage(), $e->getCode());
+            return false;
         } catch (Exception $e) {
             $this->renderResponse($e->getMessage(), self::HTTP_INTERNAL);
             return false;
@@ -159,7 +213,7 @@ class BbRest
         @header("Status: $code");
         switch ($this->format) {
         case 'xml':
-        @header("Content-Type: text/xml;");
+            @header("Content-Type: text/xml;");
             $res = sprintf('<?xml version="1.0" encoding="UTF-8"?><response><code>%d</code><message>%s</message></response>',
                         $code, self::_xmlise($content));
             echo $res;
@@ -208,4 +262,26 @@ class BbRest
         }
     }
 
+}
+
+/**
+ * BbRestService : base for all classes called by BbRest
+ *
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Rest
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @version    $Id$
+ * @link       https://labo.clochix.net/projects/show/sixties
+ */
+abstract class BbRestService
+{
+    /**
+     * Get the list of all available actions for a module
+     *
+     * @return mixed
+     */
+    abstract public function Options();
 }
