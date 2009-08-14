@@ -49,7 +49,11 @@ class WsXepCommand extends WsXep
      * Execute a command
      *
      * Parameters:
-     * - node (required)
+     * - node      (required)
+     * - action    (optionnal)
+     * - sessionid (optionnal)
+     * - to        (optionnal)
+     * - form      (optionnal) array of parameters of the command
      *
      * @param array $params parameters
      *
@@ -57,7 +61,12 @@ class WsXepCommand extends WsXep
      */
     public function executePost($params) {
         $this->checkparams(array('node'), $params);
-        $this->conn->xep('command')->execute($params['node']);
+        $form = null;
+        if ($params['form']) {
+            $form = new XepForm();
+            foreach ($params['form'] as $k => $v) $form->addField(new XepFormField($k, $v));
+        }
+        $this->conn->xep('command')->execute($params['node'], $params['action'], $params['sessionid'], $form, $params['to']);
         return $this->process('command_event_command');
     }
 }
