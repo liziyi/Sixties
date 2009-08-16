@@ -2,7 +2,10 @@
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:data="jabber:x:data">
     <xsl:output method="html" indent="no" encoding="UTF-8" omit-xml-declaration="yes"/>
     <xsl:param name="baseid" />
+    <!-- sometimes the type is wrong :(
     <xsl:template match="data:x[@type='form']">
+     -->
+    <xsl:template match="data:x">
         <xsl:element name="form">
             <xsl:attribute name="class">form_form</xsl:attribute>
             <xsl:attribute name="id"><xsl:text>form_</xsl:text><xsl:value-of select="$baseid"/></xsl:attribute>
@@ -12,7 +15,6 @@
                 <xsl:with-param name="baseid" select="$baseid" />
             </xsl:apply-templates>
             <xsl:apply-templates select="data:reported"/>
-            <xsl:apply-templates select="data:item"/>
         </xsl:element>
     </xsl:template>
     <xsl:template match="data:instructions">
@@ -71,11 +73,11 @@
                             <xsl:attribute name="checked">checked</xsl:attribute>
                         </xsl:if>
                     </xsl:element>
-                    <!-- 
                     <xsl:element name="label">
                         <xsl:attribute name="for"><xsl:value-of select="$field_id"/>_0</xsl:attribute>
                         <xsl:text>false</xsl:text>
                     </xsl:element>
+                    <!-- 
                     <xsl:element name="input">
                         <xsl:attribute name="type">radio</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
@@ -261,9 +263,30 @@
         </xsl:element>
     </xsl:template>
     <xsl:template match="data:reported">
-        <div class="form_error">UNIMPLEMENTED : reported</div>
+        <xsl:element name="table">
+            <xsl:attribute name="class">form_result</xsl:attribute>
+            <xsl:element name="thead">
+                <xsl:element name="tr">
+                    <xsl:for-each select="data:field">
+                        <xsl:element name="th">
+                          <xsl:value-of select="@label"></xsl:value-of>
+                        </xsl:element>
+                    </xsl:for-each>
+                </xsl:element>
+            </xsl:element>
+            <xsl:element name="tbody">
+                <xsl:for-each select="following-sibling::data:item">
+                    <xsl:element name="tr">
+                        <xsl:for-each select="data:field">
+                            <xsl:element name="th">
+                              <xsl:value-of select="data:value"></xsl:value-of>
+                            </xsl:element>
+                        </xsl:for-each>
+                    </xsl:element>
+                </xsl:for-each>
+            </xsl:element>
+        </xsl:element>
     </xsl:template>
     <xsl:template match="data:item">
-        <div class="form_error">UNIMPLEMENTED : item</div>
     </xsl:template>
 </xsl:stylesheet>
