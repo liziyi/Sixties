@@ -8,6 +8,7 @@
 	margin: 5px;
 	padding:5px;
 	width:98%%;
+	font-size: 9px;
 }
 #body > div {
 	border:1px solid black;
@@ -29,4 +30,28 @@
 }
 #tabs{
   min-height: 90%;
+}
+
+#messages {
+  list-style-type: none;
+  padding: 5px;
+}
+#messages LI {
+	margin: 5px;
+	padding: 15px 5px;
+}
+table {
+  border: 1px solid #000;
+  width: 100%;
+  margin: 5px;
+  border-collapse: collapse;
+}
+td, th {
+  border: 1px solid #888;
+  padding: 2px;
+}
+a.array_action {
+  cursor: pointer;
+  margin: 0 2px;
+  float: left;
 }

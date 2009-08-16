@@ -10,14 +10,13 @@
 </head>
 <body>
 	<div id="header">
-		<a class="botton" onclick="xmpp.affiliationGet();" href="#">Get Affiliations</a>
-		<a class="botton" onclick="xmpp.getSubscriptions();" href="#">Get Subscriptions</a>
 		<a class="botton" onclick="xmpp.nodeGetConfiguration('/root');" href="#">Get Node default configuration</a>
 	</div>
 	<div id="body">
 		<div id="col_left">
 		    <form>
 		      <fieldset>
+                <a class="botton" onclick="xmpp.discoServices();" href="#" title="refresh tree" style='float: right'><span class="ui-icon ui-icon-refresh" /></a>
                 <input type="text" id="tree_search_box" />
                 <input type="button" id="tree_search_button" value="search" onclick="tree.search($('#tree_search_box').val())" />  
               </fieldset>
@@ -31,7 +30,7 @@
 			<ul id="messages">
 			</ul>
 		</div>
-		<div id="col_center">
+		<div id="col_center" style="display: none">
 			<div id="tabs">
 			    <ul>
 			        <li><a href="#tabs-main">Main</a></li>
@@ -42,30 +41,65 @@
                     <div id="main_node"></div>
 			    </div>
                 <div id="tabs-node">
-                    <table id='node_affiliations'>
+                  <div>
+                    <a class="botton" onclick="xmpp.affiliationsGet(xmpp.current_node);xmpp.subscriptionsGet(xmpp.current_node);" href="#"><span class="ui-icon ui-icon-refresh" />Refresh</a>
+                  </div>
+                  <h2>Subscriptions</h2>
+                    <table id='node_subscriptions' summary='List of subscriptions to the node'>
+                      <thead>
+                        <tr>
+                          <th>Jid</th>
+                          <th>Node</th>
+                          <th>Subscription ID</th>
+                          <th>Subscription</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                      </tbody>
+                      <tfoot>
+                        <td colspan="5">&nbsp;</td>
+                      </tfoot>
+                    </table>
+                  <h2>Affiliations</h2>
+                    <table id='node_affiliations' summary='List of affiliations of the node'>
                       <thead>
                         <tr>
                           <th>Jid</th>
                           <th>Node</th>
                           <th>Affiliation</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                       </tbody>
+                      <tfoot>
+                        <td colspan="4">&nbsp;</td>
+                      </tfoot>
                     </table>
+                    <h2>Actions</h2>
+                    <div id="node_actions"></div>
                 </div>
                 <div id="tabs-subs">
-                  <h2>Your subscriptions</h2>
-                    <table id='subscriptions'>
+                  <div>
+                    <a class="botton" onclick="xmpp.affiliationsGet();xmpp.subscriptionsGet();" href="#"><span class="ui-icon ui-icon-refresh" />Refresh</a>
+                  </div>
+                  <h2>You</h2>
+                    <table id='subscriptions' summary='List of your subscriptions'>
                       <thead>
                         <tr>
                           <th>Jid</th>
                           <th>Node</th>
-                          <th>Affiliation</th>
+                          <th>Subscription ID</th>
+                          <th>Subscription</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                       </tbody>
+                      <tfoot>
+                        <td colspan="5">&nbsp;</td>
+                      </tfoot>
                     </table>
                   <h2>Your affiliations</h2>
                     <table id='affiliations'>
@@ -74,10 +108,14 @@
                           <th>Jid</th>
                           <th>Node</th>
                           <th>Affiliation</th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                       </tbody>
+                      <tfoot>
+                        <td colspan="4">&nbsp;</td>
+                      </tfoot>
                     </table>
                 </div>
 			</div>
@@ -104,6 +142,8 @@
 	var treeConfig;
 	var dialog;
 	$(document).ready(function(){
+      $('#tabs').tabs();
+      $('#col_center').show();
       xmpp = new bbXmpp();
       treeConfig = {
           data : {},
@@ -116,10 +156,9 @@
             onselect : xmpp.treeNodeSelected
           }
       }
-      $('#tabs').tabs();
 	  tree = $.tree_create();
 	  tree.init('#main_tree', treeConfig);
-	  $('#main_form').dialog({autoOpen: false, hide: 'puff', modal: true, show: 'bounce', width: 500})
+	  $('#main_form').dialog({autoOpen: false, hide: 'puff', modal: true, show: 'bounce', width: 'auto'})
 	  xmpp.init();
 	});
 	/*]]>*/</script>
