@@ -56,16 +56,21 @@ class XepPubsub extends Xep
     const SUBSCRIPTION_UNCONFIGURED = 'unconfigured';
     const SUBSCRIPTION_SUBSCRIBED   = 'subscribed';
 
-    const EVENT_AFFILIATIONS        = 'pubsub_event_affiliations';
-    const EVENT_NODECONFIG          = 'pubsub_event_nodeConfig';
-    const EVENT_NODEDEFAULTCONFIG   = 'pubsub_event_nodeDefaultConfig';
-    const EVENT_COLLECTION          = 'pubsub_event_collection';
-    const EVENT_CONFIGURATION       = 'pubsub_event_configuration';
-    const EVENT_DELETE              = 'pubsub_event_delete';
-    const EVENT_ITEMS               = 'pubsub_event_items';
-    const EVENT_PURGE               = 'pubsub_event_purge';
-    const EVENT_SUBSCRIPTION        = 'pubsub_event_subscription';
-
+    const EVENT_AFFILIATIONS         = 'pubsub_event_affiliations';
+    const EVENT_NODE_CREATED         = 'pubsub_event_created';
+    const EVENT_NODECONFIG           = 'pubsub_event_nodeConfig';
+    const EVENT_NODEDEFAULTCONFIG    = 'pubsub_event_nodeDefaultConfig';
+    const EVENT_NODE_DELETED         = 'pubsub_event_node_deleted';
+    const EVENT_ITEM_PUBLISHED       = 'pubsub_event_item_publisged';
+    const EVENT_COLLECTION           = 'pubsub_event_collection';
+    const EVENT_CONFIGURATION        = 'pubsub_event_configuration';
+    const EVENT_DELETE               = 'pubsub_event_delete';
+    const EVENT_ITEMS                = 'pubsub_event_items';
+    const EVENT_PURGE                = 'pubsub_event_purge';
+    const EVENT_SUBSCRIPTIONS        = 'pubsub_event_subscription';
+    const EVENT_SUBSCRIPTION_OPTIONS = 'pubsub_event_subscription_options';
+    const EVENT_SUBSCRIPTION_CREATED = 'pubsub_event_subscription_created';
+    const EVENT_SUBSCRIPTION_DELETED = 'pubsub_event_subscription_deleted';
     /**
      * Any entity may subscribe to the node (i.e., without the necessity for
      * subscription approval) and any entity may retrieve items from the node
@@ -156,79 +161,56 @@ class XepPubsub extends Xep
      *****************************************************************************************************************/
 
     /**
-     * Create a node
-     *
-     * Each node type has some specific options...
-     * - hometree : node name must be of the form /home/host/user/xxx
-     *
-     * @param string $type   node type (dag or flat)
-     * @param string $node   the node name. If empty, an "instant node" will be created
-     * @param array  $config configuration options
-     *
-     * @return XepPubsub $this
-     */
-    private function _createNode($type, $node=null, $config=null) {
-        if ($node) $node = "node=\"$node\" type='$type'";
-        $configure = '';
-        if (is_array($config) && count($config) > 0) {
-            $configure = $this->_buildNodeOptions($config);
-        }
-        $this->sendIq(array('type'=>'set', 'msg'=>"<create $node/><configure>$configure</configure>"));
-        return $this;
-    }
-    /**
      * Create a "collection" node
      *
+     * @param string $server the pubsub server name
+     * @param string $type   node type. May be 'collection' or 'leaf'
      * @param string $node   the node name. If empty, an "instant node" will be created
      * @param string $parent parent's node. If null, use node's path
      * @param array  $config configuration options
      *
      * @return XepPubsub $this
-     *
-     * @FIXME : fix me
      */
-    public function nodeCreateCollection($node = null, $parent = null, $config = null) {
+    public function nodeCreate($server, $type = 'leaf', $node = null, $parent = null, $config = null) {
+        // Remove trailing slash
         if (substr($node, -1) == '/') $node = substr($node, 0, -1);
-        if ($parent == null) {
-            $parent = substr($node, 0, strrpos($node, '/'));
-        }
         if (!is_array($config)) $config = array();
         if (!isset($config['collection'])) {
-            $config['collection'] == $parent;
+            // Get the parent node
+            if ($parent == null) {
+                $parent = substr($node, 0, strrpos($node, '/'));
+            }
+            $config['pubsub#collection'] = $parent;
         }
-        $config['node_type'] = 'collection';
-        $this->_createNode('dag', $node, $config);
-        return $this;
-    }
-    /**
-     * Create a "leaf" node
-     *
-     * @param string $node   the node name. If empty, an "instant node" will be created
-     * @param array  $config configuration options
-     *
-     * @return XepPubsub $this
-     */
-    public function nodeCreateLeaf($node = null, $config=null) {
-        if (substr($node, -1) == '/') $node = substr($node, 0, -1);
-        if (!is_array($config)) $config = array();
-        $config['node_type'] = 'leaf';
-        $this->_createNode('dag', $node, $config);
+        if ($type != null) {
+            $config['pubsub#node_type'] = $type;
+        }
+
+        if ($node) $node = "node=\"$node\"";
+        else $node = '';
+        $configure = '';
+        if (count($config) > 0) {
+            $configure = $this->_buildNodeOptions($config);
+        }
+        $this->sendIq(array('type'=>'set', 'to' => $server, 'msg'=>"<create $node/><configure>$configure</configure>"));
+
         return $this;
     }
 
     /**
      * Get or set the configuration of a node
      *
+     * @param string  $server     the pubsub server name
      * @param string  $node       the node name
      * @param array   $config     hashmap of configuration-key => configuration-value or null to get the current configuration
      * @param boolean $collection to get the configuration of a collection, set config to null and collection to true
-     * @param string  $server     server name
      *
      * @return XepPubsub $this
      */
-    public function nodeConfiguration($node, $config = null, $collection = false, $server = null) {
+    public function nodeConfiguration($server, $node, $config = null, $collection = false) {
         if ($node) $node = "node=\"$node\"";
         $req       = array();
+        $req['to'] = $server;
         $configure = '';
         if (is_array($config)) {
             $req['type'] = 'set';
@@ -253,9 +235,7 @@ class XepPubsub extends Xep
      * @return XepPubsub $this
      */
     public function nodeConfigurationDefault($server = null) {
-        $req = array('msg' => '<default />');
-        if ($server != null) $req['to'] = $server;
-        $this->sendIq($req);
+        $this->sendIq(array('to' => $server, 'msg' => '<default />'));
         return $this;
     }
 
@@ -270,7 +250,7 @@ class XepPubsub extends Xep
         $form = new XepForm();
         $form->addFormtype('http://jabber.org/protocol/pubsub#node_config');
         foreach ($config as $key => $val) {
-            $form->addField(new XepFormField("$key", $val));
+            $form->addField(new XepFormField($key, $val));
         }
         return $form;
     }
@@ -278,15 +258,16 @@ class XepPubsub extends Xep
     /**
      * Delete a node
      *
-     * @param string $node the node name
+     * @param string $server the pubsub server name
+     * @param string $node   the node name
      *
      * @return XepPubsub $this
      */
-    public function deleteNode($node = null) {
-        if ($node) $node = "node=\"$node\"";
+    public function nodeDelete($server, $node) {
+        $node = "node=\"$node\"";
         // There's no other way to handle the response than by id
         $this->conn->addIdHandler($this->conn->getNextId(), 'handlerPubsubDelete', $this);
-        return $this->sendIq(array('type'=>'set', 'msg'=>"<delete $node />"));
+        return $this->sendIq(array('type'=>'set', 'to' => $server, 'msg'=>"<delete $node />"));
     }
 
     /******************************************************************************************************************
@@ -298,19 +279,22 @@ class XepPubsub extends Xep
     /**
      * Publish content into a node
      *
-     * @param string $node the node name
-     * @param string $item XML content
-     * @param string $id   id of the content (optionnal)
+     * @param string $server the pubsub server name
+     * @param string $node   the node name
+     * @param string $item   XML content
+     * @param string $id     id of the content (optionnal)
      *
      * @return XepPubsub $this
      */
-    public function itemPublish($node, $item, $id=null) {
+    public function itemPublish($server, $node, $item, $id=null) {
         if (simplexml_load_string($item) === false) {
-            //@TODO : throws exception
             $this->log("published content is not valid XML", XMPPHP_Log::LEVEL_ERROR);
+            throw new XepException("published content is not valid XML", 400);
         } else {
             if ($id) $id = "id='$id'";
-            $this->sendIq(array('type' => 'set', 'msg'=>"<publish node=\"$node\" ><item $id>$item</item></publish>"));
+            // There's no other way to handle the response than by id
+            $this->conn->addIdHandler($this->conn->getNextId(), 'handlerPubsubPublished', $this);
+            $this->sendIq(array('type' => 'set', 'to' => $server, 'msg'=>"<publish node=\"$node\" ><item $id>$item</item></publish>"));
         }
         return $this;
     }
@@ -318,35 +302,36 @@ class XepPubsub extends Xep
     /**
      * Delete published content
      *
+     * @param string  $server the pubsub server name
      * @param string  $node   the node name
      * @param mixed   $items  item id or array of items. If null, all items will be purged !
      * @param boolean $notify should subscribers been notified
      *
      * @return $this
      */
-    public function itemUnpublish($node, $items = null, $notify = null) {
+    public function itemUnpublish($server, $node, $items = null, $notify = null) {
         if ($items === null) {
             // Purge all items
-            return $this->itemsPurge($node);
+            return $this->itemsPurge($server, $node);
         }
         if (!is_array($items)) $items = array($items);
-        $req = '';
-        foreach ($items as $item) $req .= "<item id='$item' />";
+        $unpublish = '';
+        foreach ($items as $item) $unpublish .= "<item id='$item' />";
         $notif = ($notify ? "notify='true'" : '');
-        $this->sendIq(array('type' => 'set', 'msg'=>"<retract node=\"$node\" $notif>$req</retract>"));
+        $this->sendIq(array('type' => 'set', 'to' => $server, 'msg'=>"<retract node=\"$node\" $notif>$unpublish</retract>"));
         return $this;
     }
 
     /**
      * Purge all items of a node
      *
-     * @param string $node the node name
+     * @param string $server the pubsub server name
+     * @param string $node   the node name
      *
      * @return XepPubSub $this
      */
-    public function itemsPurge($node) {
-        $req = '';
-        $this->sendIq(array('type' => 'set', 'msg'=>"<purge node=\"$node\" />"));
+    public function itemsPurge($server, $node) {
+        $this->sendIq(array('type' => 'set', 'to' => $server, 'msg'=>"<purge node=\"$node\" />"));
         return $this;
     }
     /******************************************************************************************************************
@@ -358,20 +343,21 @@ class XepPubsub extends Xep
     /**
      * Ask for the items of a node
      *
-     * @param string  $node  the node name
-     * @param mixed   $items item id or array of items
-     * @param integer $max   max number of items
+     * @param string  $server the pubsub server name
+     * @param string  $node   the node name
+     * @param mixed   $items  item id or array of items
+     * @param integer $max    max number of items
      *
      * @return this
      */
-    public function getItems($node, $items = null, $max = null) {
+    public function getItems($server, $node, $items = null, $max = null) {
         if ($max) $max = "max_items='$max'";
         $req = '';
         if ($items !== null) {
             if (!is_array($items)) $items = array($items);
             foreach ($items as $item) $req .= "<item id='$item' />";
         }
-        $this->sendIq(array('msg'=>"<items node=\"$node\" $max>$req</items>"));
+        $this->sendIq(array('to' => $server, 'msg'=>"<items node=\"$node\" $max>$req</items>"));
         return $this;
     }
 
@@ -387,16 +373,17 @@ class XepPubsub extends Xep
      * Without node, return all affiliations of the owner
      * With a node, return all affiliations on this node
      *
-     * @param string $node node name
+     * @param string $server the pubsub server name
+     * @param string $node   node name
      *
      * @return XepPubsub $this
      */
-    public function affiliationGet($node = null) {
+    public function affiliationGet($server, $node = null) {
         if ($node == null) {
             $this->conn->addIdHandler($this->conn->getNextId(), 'handlerPubsub', $this);
-            $this->sendIq(array('msg'=>"<affiliations />"), self::NS);
+            $this->sendIq(array('to' => $server, 'msg'=>"<affiliations />"), self::NS);
         } else {
-            $this->sendIq(array('msg'=>"<affiliations node=\"$node\"/>"), self::NS . '#owner');
+            $this->sendIq(array('to' => $server, 'msg'=>"<affiliations node=\"$node\"/>"), self::NS . '#owner');
         }
         return $this;
     }
@@ -404,91 +391,103 @@ class XepPubsub extends Xep
     /**
      * Set affiliations
      *
+     * @param string $server      the pubsub server name
      * @param string $node        the node name
      * @param string $jid         jid of the user to affiliate
      * @param string $affiliation one of self::AFFILIATION_*
      *
      * @return XepPubsub $this
      */
-    public function affiliationSet($node, $jid, $affiliation) {
-        $this->sendIq(array('type' => 'set', 'msg'=>"<affiliations node=\"$node\"><affiliation jid=\"$jid\" affiliation='$affiliation' /></affiliations>"), self::NS . '#owner');
+    public function affiliationSet($server, $node, $jid, $affiliation) {
+        $this->sendIq(array('type' => 'set', 'to' => $server, 'msg'=>"<affiliations node=\"$node\"><affiliation jid=\"$jid\" affiliation='$affiliation' /></affiliations>"), self::NS . '#owner');
         return $this;
     }
 
     /**
      * Get subscriptions
      *
-     * @param string $node the node name
+     * @param string $server the pubsub server name
+     * @param string $node   the node name
      *
      * @return XepPubsub $this
      */
-    public function getSubscriptions($node = null) {
-        if ($node) $node = "node=\"$node\"";
-        $this->sendIq(array('msg'=>"<subscriptions $node />"));
+    public function subscriptionGet($server, $node = null) {
+        if ($node == null) {
+            $this->sendIq(array('to' => $server, 'msg'=>"<subscriptions />"), self::NS);
+        } else {
+            $this->sendIq(array('to' => $server, 'msg'=>"<subscriptions node=\"$node\"/>"), self::NS . '#owner');
+        }
         return $this;
     }
 
     /**
      * Subscribe to a node
      *
+     * @param string $server  the pubsub server name
      * @param string $node    the node name
      * @param array  $options options of the subscription
      *
      * @return XepPubsub $this
      */
-    public function subscribe($node = null, $options = null) {
+    public function subscribe($server, $node = null, $options = null) {
         if ($node !== null) $node = "node=\"$node\"";
         $jid = $this->conn->getBaseJid();
         $opt = '';
         if (is_array($options)) $opt = "<options>" . $this->_buildSubscriptionOptions($options) . "</options>";
-        $this->sendIq(array('type' => 'set', 'msg'=>"<subscribe $node jid=\"$jid\" />$opt"));
+        $this->sendIq(array('type' => 'set', 'to' => $server, 'msg'=>"<subscribe $node jid=\"$jid\" />$opt"));
         return $this;
     }
 
     /**
      * Unsubscrive from a node
      *
-     * @param string $node  the node name
-     * @param string $subid id of the subscription (optionnal)
+     * @param string $server the pubsub server name
+     * @param string $node   the node name
+     * @param string $subid  id of the subscription (optionnal)
      *
      * @return XepPubsub $this
      */
-    public function unsubscribe($node, $subid = null) {
+    public function unsubscribe($server, $node, $subid = null) {
         if ($subid) $subid = "subid=\"$subid\"";
         $jid = $this->conn->getBaseJid();
-        $this->sendIq(array('type' => 'set', 'msg'=>"<unsubscribe node=\"$node\" jid=\"$jid\" $subid />"));
+        $this->conn->addIdHandler($this->conn->getNextId(), 'handlerPubsubSubsDelete', $this);
+        $this->sendIq(array('type' => 'set', 'to' => $server, 'msg'=>"<unsubscribe node=\"$node\" jid=\"$jid\" $subid />"));
         return $this;
     }
 
     /**
      * Get Subscription options
      *
-     * @param string $node  the node name
-     * @param string $subid subscription id (optionnal)
+     * @param string $server the pubsub server name
+     * @param string $node   the node name
+     * @param string $subid  subscription id (optionnal)
      *
      * @return XepPubsub $this
      */
-    public function subscriptionOptionsGet($node, $subid = null) {
+    public function subscriptionOptionsGet($server, $node, $subid = null) {
         if ($subid) $subid = "subid=\"$subid\"";
         $jid = $this->conn->getBaseJid();
-        $this->sendIq(array('type' => 'get', 'msg'=>"<options node=\"$node\" jid=\"$jid\" $subid />"));
+        $this->conn->addIdHandler($this->conn->getNextId(), 'handlerPubsubSubsOptionsGet', $this);
+        $this->sendIq(array('type' => 'get', 'to' => $server, 'msg'=>"<options node=\"$node\" jid=\"$jid\" $subid />"));
         return $this;
     }
 
     /**
      * Set Subscription options
      *
+     * @param string $server  the pubsub server name
      * @param string $node    the node name
      * @param array  $options hashmap of options
      * @param string $subid   subscription id (optionnal)
      *
      * @return XepPubsub $this
      */
-    public function subscriptionOptionsSet($node, $options, $subid = null) {
+    public function subscriptionOptionsSet($server, $node, $options, $subid = null) {
         if ($subid) $subid = "subid=\"$subid\"";
         $jid = $this->conn->getBaseJid();
         $opt = $this->_buildSubscriptionOptions($options);
-        $this->sendIq(array('type' => 'set', 'msg'=>"<options node=\"$node\" jid=\"$jid\" $subid >$opt</options>"));
+        $this->conn->addIdHandler($this->conn->getNextId(), 'handlerPubsubSubsOptions', $this);
+        $this->sendIq(array('type' => 'set', 'to' => $server, 'msg'=>"<options node=\"$node\" jid=\"$jid\" $subid >$opt</options>"));
         return $this;
     }
 
@@ -503,7 +502,7 @@ class XepPubsub extends Xep
         $form =new XepForm();
         $form->addFormtype('http://jabber.org/protocol/pubsub#subscribe_options');
         foreach ($options as $key => $val) {
-            $form->addField(new XepFormField("pubsub#$key", $val));
+            $form->addField(new XepFormField("$key", $val));
         }
         return $form;
     }
@@ -513,12 +512,13 @@ class XepPubsub extends Xep
      *
      * Without arguments, get all pending requests and ask for details of each
      *
+     * @param string $server    the server name
      * @param string $node      the node name
      * @param string $sessionid the sessionid provided by the server
      *
      * @return XepPubsub $this
      */
-    public function subscriptionGetPending($node = null, $sessionid = null) {
+    public function subscriptionGetPending($server, $node = null, $sessionid = null) {
         if ($node !== null) {
             $form = new XepForm(XepForm::FORM_TYPE_SUBMIT);
             $form->addField(new XepFormField('pubsub#node', $node));
@@ -530,54 +530,57 @@ class XepPubsub extends Xep
             XepCommand::COMMAND_ACTION_EXECUTE,
             $sessionid,
             $form,
-            $this->pubsubHost);
+            $server);
         return $this;
     }
 
     /**
      * Send a subscription management request
      *
-     * @param string $node  the node name
-     * @param string $jid   the subscriber's jid
-     * @param string $allow 'true' or 'false'
-     * @param string $subid id of the request
+     * @param string $server the pubsub server name
+     * @param string $node   the node name
+     * @param string $jid    the subscriber's jid
+     * @param string $allow  'true' or 'false'
+     * @param string $subid  id of the request
      *
      * @return void
      */
-    private function _subscriptionManage($node, $jid, $allow, $subid = null) {
+    private function _subscriptionManage($server, $node, $jid, $allow, $subid = null) {
         $form = new XepForm();
         $req = $form->addFormtype('http://jabber.org/protocol/pubsub#subscribe_authorization')
                     ->addField(new XepFormField('pubsub#node', $node))
                     ->addField(new XepFormField('pubsub#subscriber_jid', $jid))
                     ->addField(new XepFormField('pubsub#allow', $allow));
         if ($subid !== null) $form->addField(new XepField('pubsub#sibid', $subid));
-        $this->conn->sendForm($this->pubsubHost, $req);
+        $this->conn->sendForm($server, $req);
     }
 
     /**
      * Approve a subscription request
      *
-     * @param string $node  the node name
-     * @param string $jid   the subscriber's jid
-     * @param string $subid id of the request
+     * @param string $server the pubsub server name
+     * @param string $node   the node name
+     * @param string $jid    the subscriber's jid
+     * @param string $subid  id of the request
      *
      * @return XepPubsub $this
      */
-    public function subscriptionApprove($node, $jid, $subid = null) {
-        $this->_subscriptionManage($node, $jid, 'true', $subid);
+    public function subscriptionApprove($server, $node, $jid, $subid = null) {
+        $this->_subscriptionManage($server, $node, $jid, 'true', $subid);
         return $this;
     }
     /**
      * Deny a subscription request
      *
-     * @param string $node  the node name
-     * @param string $jid   the subscriber's jid
-     * @param string $subid id of the request
+     * @param string $server the pubsub server name
+     * @param string $node   the node name
+     * @param string $jid    the subscriber's jid
+     * @param string $subid  id of the request
      *
      * @return XepPubsub $this
      */
-    public function subscriptionDeny($node, $jid, $subid = null) {
-        $this->_subscriptionManage($node, $jid, 'false', $subid);
+    public function subscriptionDeny($server, $node, $jid, $subid = null) {
+        $this->_subscriptionManage($server, $node, $jid, 'false', $subid);
         return $this;
     }
 
@@ -600,6 +603,16 @@ class XepPubsub extends Xep
             if ($res->code != XepResponse::XEPRESPONSE_KO) {
                 $node    = $xml->attrs['from'] . '!' . $query->attrs['node'];
                 $pubsub = $xml->sub('pubsub');
+                // Result of node creation
+                if ($pubsub->hasSub('create')) {
+                    $res->message = $pubsub->sub('create')->attrs;
+                    $this->conn->event(self::EVENT_NODE_CREATED, $res);
+                }
+                // Result of a subscription creation
+                if ($pubsub->hasSub('subscription')) {
+                    $res->message = $pubsub->sub('subscription')->attrs;
+                    $this->conn->event(self::EVENT_SUBSCRIPTION_CREATED, $res);
+                }
                 // List of user's affiliations
                 if ($pubsub->hasSub('affiliations')) {
                     $res->message = array();
@@ -612,6 +625,24 @@ class XepPubsub extends Xep
                         }
                     }
                     $this->conn->event(self::EVENT_AFFILIATIONS, $res);
+                }
+                // List of user's subscriptions
+                if ($pubsub->hasSub('subscriptions')) {
+                    $res->message = array();
+                    $subs = $pubsub->sub('subscriptions');
+                    $jid  = $this->conn->getBaseJid();
+                    foreach ($subs->subs as $sub) {
+                        if ($sub->name == 'subscription') {
+                            if (!isset($sub->attrs['jid'])) $sub->attrs['jid'] = $node;
+                            $res->message[] = $sub->attrs;
+                        }
+                    }
+                    $this->conn->event(self::EVENT_SUBSCRIPTIONS, $res);
+                }
+                // Options of a subscription
+                if ($pubsub->hasSub('options')) {
+                    $res->message = $pubsub->sub('options')->toString();
+                    $this->conn->event(self::EVENT_SUBSCRIPTION_OPTIONS, $res);
                 }
             }
         } catch (Exception $e) {
@@ -636,7 +667,7 @@ class XepPubsub extends Xep
                 if ($pubsub->hasSub('affiliations')) {
                     $res->message = array();
                     $aff = $pubsub->sub('affiliations');
-                    $node = $add->attrs['node'];
+                    $node = $aff->attrs['node'];
                     foreach ($aff->subs as $sub) {
                         if ($sub->name == 'affiliation') {
                             if (!isset($sub->attrs['node'])) $sub->attrs['node'] = $node;
@@ -644,6 +675,19 @@ class XepPubsub extends Xep
                         }
                     }
                     $this->conn->event(self::EVENT_AFFILIATIONS, $res);
+                }
+                // List of node's subscriptions
+                if ($pubsub->hasSub('subscriptions')) {
+                    $res->message = array();
+                    $subs = $pubsub->sub('subscriptions');
+                    $node = $subs->attrs['node'];
+                    foreach ($subs->subs as $sub) {
+                        if ($sub->name == 'subscription') {
+                            if (!isset($sub->attrs['node'])) $sub->attrs['node'] = $node;
+                            $res->message[] = $sub->attrs;
+                        }
+                    }
+                    $this->conn->event(self::EVENT_SUBSCRIPTIONS, $res);
                 }
                 if ($pubsub->hasSub('configure')) {
                     // node configuration
@@ -683,6 +727,68 @@ class XepPubsub extends Xep
     }
 
     /**
+     * Handle request of options of subscription response
+     *
+     * Should go to handlerPubsub but ejabberd don't send the correct XML
+     *
+     * @param XMPPHP_XMLObj $xml the response
+     *
+     * @return void
+     */
+    public function handlerPubsubSubsOptionsGet(XMPPHP_XMLObj $xml){
+        try {
+            $res = $this->commonHandler($xml);
+            if ($res->code != XepResponse::XEPRESPONSE_KO) {
+                $res->message = $xml->sub('x')->toString();
+                $this->conn->event(self::EVENT_SUBSCRIPTION_OPTIONS, $res);
+            }
+        } catch (Exception $e) {
+            $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
+            $this->conn->event(self::EVENT_ERROR, $res);
+        }
+    }
+
+    /**
+     * Handle update of options of subscription response
+     *
+     * @param XMPPHP_XMLObj $xml the response
+     *
+     * @return void
+     */
+    public function handlerPubsubSubsOptions(XMPPHP_XMLObj $xml){
+        try {
+            $res = $this->commonHandler($xml);
+            if ($res->code != XepResponse::XEPRESPONSE_KO) {
+                $res->message = "Subscription updated";
+                $this->conn->event(self::EVENT_OK, $res);
+            }
+        } catch (Exception $e) {
+            $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
+            $this->conn->event(self::EVENT_ERROR, $res);
+        }
+    }
+
+    /**
+     * Handle Unsubscribe response
+     *
+     * @param XMPPHP_XMLObj $xml the response
+     *
+     * @return void
+     */
+    public function handlerPubsubSubsDelete(XMPPHP_XMLObj $xml){
+        try {
+            $res = $this->commonHandler($xml);
+            if ($res->code != XepResponse::XEPRESPONSE_KO) {
+                $res->message = "Subscription updated";
+                $this->conn->event(self::EVENT_SUBSCRIPTION_DELETED, $res);
+            }
+        } catch (Exception $e) {
+            $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
+            $this->conn->event(self::EVENT_ERROR, $res);
+        }
+    }
+
+    /**
      * Handle delete responses
      *
      * @param XMPPHP_XMLObj $xml the response
@@ -690,16 +796,35 @@ class XepPubsub extends Xep
      * @return void
      */
     public function handlerPubsubDelete(XMPPHP_XMLObj $xml) {
-        $this->conn->history($xml);
-        if ($xml->hasSub('error')) {
-            $err = $xml->sub('error');
-            $msg = '';
-            foreach ($err->subs as $sub) $msg.= $sub->name . " ";
-            $this->log("ERROR : ({$err->attrs['code']}) {$err->attrs['type']} : $msg", XMPPHP_Log::LEVEL_ERROR);
-        } else {
-            $this->log("Node deleted", XMPPHP_Log::LEVEL_INFO);
+        try {
+            $res = $this->commonHandler($xml);
+            if ($res->code != XepResponse::XEPRESPONSE_KO) {
+                $this->conn->event(self::EVENT_NODE_DELETED, $res);
+            }
+        } catch (Exception $e) {
+            $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
+            $this->conn->event(self::EVENT_ERROR, $res);
         }
-        $this->conn->event('pubsub_handled');
+    }
+
+    /**
+     * Handle item published
+     *
+     * @param XMPPHP_XMLObj $xml the response
+     *
+     * @return void
+     */
+    public function handlerPubsubPublished(XMPPHP_XMLObj $xml) {
+        try {
+            $res = $this->commonHandler($xml);
+            if ($res->code != XepResponse::XEPRESPONSE_KO) {
+                //@TODO get the node ID of the new item
+                $this->conn->event(self::EVENT_ITEM_PUBLISHED, $res);
+            }
+        } catch (Exception $e) {
+            $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
+            $this->conn->event(self::EVENT_ERROR, $res);
+        }
     }
 
     /**
@@ -710,38 +835,39 @@ class XepPubsub extends Xep
      * @return void
      */
     public function handlerEvent(XMPPHP_XMLObj $xml) {
-        // @FIXME : on errors there's no event
-        if ($xml->hasSub('error')) {
-            $err = $xml->sub('error');
-            $msg = '';
-            foreach ($err->subs as $sub) $msg.= $sub->name . " ";
-            $this->log("ERROR : ({$err->attrs['code']}) {$err->attrs['type']} : $msg", XMPPHP_Log::LEVEL_ERROR);
-        }
-        if ($xml->hasSub('event', 'http://jabber.org/protocol/pubsub#event')) {
-            $event = $xml->sub('event');
-            if ($event->hasSub('collection')) {
-                //@TODO
-                $this->conn->event(self::EVENT_COLLECTION);
+        try {
+            $res = $this->commonHandler($xml);
+            if ($res->code != XepResponse::XEPRESPONSE_KO) {
+                if ($xml->hasSub('event', 'http://jabber.org/protocol/pubsub#event')) {
+                    $event = $xml->sub('event');
+                    if ($event->hasSub('collection')) {
+                        //@TODO
+                        $this->conn->event(self::EVENT_COLLECTION);
+                    }
+                    if ($event->hasSub('configuration')) {
+                        //@TODO
+                        $this->conn->event(self::EVENT_CONFIGURATION);
+                    }
+                    if ($event->hasSub('delete')) {
+                        //@TODO
+                        $this->conn->event(self::EVENT_DELETE);
+                    }
+                    if ($event->hasSub('items')) {
+                        //@TODO
+                        $this->conn->event(self::EVENT_ITEMS);
+                    }
+                    if ($event->hasSub('purge')) {
+                        $this->conn->event(self::EVENT_PURGE, $event->sub('purge')->attrs['node']);
+                    }
+                    if ($event->hasSub('subscription')) {
+                        $sub = $event->sub('subscription');
+                        $this->conn->event(self::EVENT_SUBSCRIPTION, array('node' => $sub->attrs['node'], 'subscription' => $sub->attrs['subscription']));
+                    }
+                }
             }
-            if ($event->hasSub('configuration')) {
-                //@TODO
-                $this->conn->event(self::EVENT_CONFIGURATION);
-            }
-            if ($event->hasSub('delete')) {
-                //@TODO
-                $this->conn->event(self::EVENT_DELETE);
-            }
-            if ($event->hasSub('items')) {
-                //@TODO
-                $this->conn->event(self::EVENT_ITEMS);
-            }
-            if ($event->hasSub('purge')) {
-                $this->conn->event(self::EVENT_PURGE, $event->sub('purge')->attrs['node']);
-            }
-            if ($event->hasSub('subscription')) {
-                $sub = $event->sub('subscription');
-                $this->conn->event(self::EVENT_SUBSCRIPTION, array('node' => $sub->attrs['node'], 'subscription' => $sub->attrs['subscription']));
-            }
+        } catch (Exception $e) {
+            $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
+            $this->conn->event(self::EVENT_ERROR, $res);
         }
         $this->log("EVENT received", XMPPHP_Log::LEVEL_WARNING);
         $this->conn->event('pubsub_event_handled', $xml->toString());
