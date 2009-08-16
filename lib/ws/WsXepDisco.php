@@ -72,7 +72,7 @@ class WsXepDisco extends WsXep
      *
      * @return XepResponse
      *
-     * @UrlMap({'server', 'node'   = 'titi'})
+     * @UrlMap({'server', 'node'})
      */
     public function infoGet($params) {
         $this->conn->xep('discover')->discoverInfo($params['server'], $params['node']);
@@ -120,7 +120,14 @@ class WsXepDisco extends WsXep
             if (is_array($hostval['items']) && is_array($hostval['items'])) {
                 foreach ($hostval['items'] as $itemkey => $itemval) {
                     $tmp = explode('!', $itemkey);
-                    $child = $this->_servicesGet($tmp[0], $tmp[1]);
+                    $childServer = $tmp[0];
+                    if (count($tmp) < 3) {
+                        $childNode = $tmp[1];
+                    } else {
+                        unset($tmp[0]);
+                        $childNode = implode('!', $tmp);
+                    }
+                    $child = $this->_servicesGet($childServer, $childNode);
                     if ($child->code == 200) {
                         $res->message[$host]['items'] = array_merge_recursive($res->message[$host]['items'], $child->message);
                     }

@@ -26,8 +26,6 @@
  * @link      https://labo.clochix.net/projects/show/sixties
  */
 
-require_once dirname(__FILE__) . '/../sixties/XMPP2.php';
-
 /**
  * WsXep : Base class for the interfaces with Xep API
  *
@@ -52,6 +50,8 @@ class WsXep extends BbRestService
      */
     protected $timeout;
 
+    protected $params;
+
     /**
      * Constructor : connect to the XMPP server
      *
@@ -60,11 +60,13 @@ class WsXep extends BbRestService
     public function __construct($params) {
         // set default timeout : 5s
         $this->timeout = 5;
+        $this->params  = $params;
         if (is_array($params)) {
-            $this->conn = new XMPP2($params['host'], $params['port'], $params['user'], $params['password'], uniqid(get_class($this)), $params['server'], false, XMPPHP_Log::LEVEL_INFO);
             switch ($params['port']) {
             case '5280':
+                include_once dirname(__FILE__) . '/../sixties/XMPP_BOSH.php';
                 session_start();
+                $this->conn = new XMPPHP_BOSH($params['host'], $params['port'], $params['user'], $params['password'], uniqid(get_class($this)), $params['server'], false, XMPPHP_Log::LEVEL_INFO);
                 // Use XMPP over BOSH
                 $this->conn->connect("http://{$params['host']}:{$params['port']}/http-bind", 1, true);
                 // Pinging the server is always a good idea ;)
@@ -73,12 +75,14 @@ class WsXep extends BbRestService
                 //@TODO : if it still don't work, do as in BbRest : if 503, go to sleep and try later
                 break;
             default:
+                include_once dirname(__FILE__) . '/../sixties/XMPP2.php';
+                $this->conn = new XMPP2($params['host'], $params['port'], $params['user'], $params['password'], uniqid(get_class($this)), $params['server'], false, XMPPHP_Log::LEVEL_INFO);
                 $this->conn->connect();
-                $this->conn->processUntil('session_start', $this->timeout);
+                $this->conn->processUntil('session_start', 10);
                 break;
             }
             $this->conn->logPath = '/tmp/xmpp.log';
-            $this->conn->logXml = false;
+            $this->conn->logXml = true;
         } else {
             //@TODO : set the connexion
         }
@@ -139,19 +143,31 @@ class WsXep extends BbRestService
     /**
      * Wait for an event and return the result
      *
-     * @param string $event the event name
+     * @param string  $event   the event name
+     * @param integer $timeout time to wait
      *
      * @return mixed
      */
-    protected function process($event) {
+    protected function process($event, $timeout = null) {
+        if (!$timeout) $timeout = $this->timeout;
         if (!is_array($event)) $event = array($event);
         // Always trigger errors !
         $event[] = XEP::EVENT_ERROR;
-        $payloads = $this->conn->processUntil($event, $this->timeout);
+        $payloads = $this->conn->processUntil($event, $timeout);
         foreach ($payloads as $payload) {
             if (in_array($payload[0], $event)) return $payload[1];
         }
-        return false;
+        $message = '';
+        if (is_array($payloads)) {
+            if (count($payloads) == 0) {
+                $message = 'Timeout before answer';
+            } else {
+                $message = 'Event never happens';
+            }
+        } else {
+            $message = 'Unknown error';
+        }
+        return new XepResponse($message, XepResponse::XEPRESPONSE_KO);
     }
 
     /**
@@ -171,6 +187,21 @@ class WsXep extends BbRestService
             }
         }
         return true;
+    }
+
+    /**
+     * Create a XepForm from incoming datas
+     *
+     * @param array $data the datas
+     *
+     * @return XepForm
+     */
+    protected function formLoad($data) {
+        if ($data) {
+            $form = new XepForm();
+            foreach ($data as $k => $v) $form->addField(new XepFormField($k, $v));
+            return $form;
+        } else return null;
     }
 
     /**

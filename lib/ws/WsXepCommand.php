@@ -61,11 +61,7 @@ class WsXepCommand extends WsXep
      */
     public function executePost($params) {
         $this->checkparams(array('node'), $params);
-        $form = null;
-        if ($params['form']) {
-            $form = new XepForm();
-            foreach ($params['form'] as $k => $v) $form->addField(new XepFormField($k, $v));
-        }
+        $form = $this->formLoad($params['form']);
         $this->conn->xep('command')->execute($params['node'], $params['action'], $params['sessionid'], $form, $params['to']);
         return $this->process('command_event_command');
     }
