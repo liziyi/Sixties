@@ -31,13 +31,14 @@ require_once dirname(__FILE__) . '/XMPP2.php';
 /**
  * Xep : parent class for all XEP
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @version   $Id$
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @version    $Id$
+ * @link       https://labo.clochix.net/projects/show/sixties
  *
  * @TODO : should be abstract ?
  */
@@ -115,13 +116,14 @@ class Xep
 /**
  * XepResponse : Class for the objects returned by every handler
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @version   $Id$
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @version    $Id$
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 class XepResponse
 {
@@ -142,4 +144,20 @@ class XepResponse
         $this->message = $message;
         $this->code    = $code;
     }
+}
+
+/**
+ * XepException : Exceptions throwns by Xep classes service
+ *
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @version    $Id$
+ * @link       https://labo.clochix.net/projects/show/sixties
+ */
+class XepException extends Exception
+{
 }

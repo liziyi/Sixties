@@ -27,13 +27,6 @@
  */
 
 require_once dirname(dirname(__FILE__)) . '/vendors/xmpphp/XMPPHP/XMPP.php';
-require_once dirname(dirname(__FILE__)) . '/vendors/xmpphp/XMPPHP/BOSH.php';
-require_once dirname(__FILE__) . '/XepCommand.php';
-require_once dirname(__FILE__) . '/XepDiscover.php';
-require_once dirname(__FILE__) . '/XepForm.php';
-require_once dirname(__FILE__) . '/XepMuc.php';
-require_once dirname(__FILE__) . '/XepPing.php';
-require_once dirname(__FILE__) . '/XepPubsub.php';
 
 /**
  * XMPP2 : some extends to XMPPHP_XMPP for our use
@@ -47,7 +40,6 @@ require_once dirname(__FILE__) . '/XepPubsub.php';
  * @link      https://labo.clochix.net/projects/show/sixties
  */
 class XMPP2 extends XMPPHP_XMPP
-//class XMPP2 extends XMPPHP_BOSH
 {
 
     /**
@@ -91,11 +83,7 @@ class XMPP2 extends XMPPHP_XMPP
         parent::__construct($host, $port, $user, $password, $resource, $server, $printlog, $loglevel);
 
         $this->addXPathHandler('{jabber:client}message', 'handlerFormMessage', $this);
-        $this->xep['command']  = new XepCommand($this);
-        $this->xep['discover'] = new XepDiscover($this);
-        $this->xep['muc']      = new XepMuc($this);
-        $this->xep['ping']     = new XepPing($this);
-        $this->xep['pubsub']   = new XepPubsub($this);
+
     }
 
     /**
@@ -162,13 +150,37 @@ class XMPP2 extends XMPPHP_XMPP
     }
 
     /**
-     * Return a service
+     * Return a service.
+     *
+     * Services are loaded on demand
      *
      * @param string $service service type
      *
      * @return Xep the service
      */
     public function xep($service) {
+        $service = strtolower($service);
+        // If the service is not already loaded, try to load it. This avoid
+        if (!isset($this->xep[$service])) {
+            $classname = 'Xep' . ucfirst($service);
+            if (!class_exists($classname)) {
+                // Try to load the class
+                $filename = dirname(__FILE__) . DIRECTORY_SEPARATOR . $classname . '.php';
+                if (file_exists($filename)) {
+                    include_once $filename;
+                    $this->xep[$service] = new $classname($this);
+                } else {
+                    $this->log->log("Unable to load $filename", XMPPHP_Log::LEVEL_ERROR);
+                }
+            } else {
+                $this->xep[$service] = new $classname($this);
+            }
+            if (!isset($this->xep[$service])) {
+                // return dummy service
+                //@TODO : what shall we do ? return null ? throw an exception ?
+                $this->xep[$service] = new Xep($this);
+            }
+        }
         return $this->xep[$service];
     }
 
@@ -246,6 +258,7 @@ class XMPP2 extends XMPPHP_XMPP
                 if (substr($string, 0, 2) != '<?') $string = "<xml>$string</xml>";
                 $res = '';
                 if ($title) $res .= "\n\n========== $title ==========\n";
+                $res .= date('c') . "\n\n";
                 $doc = new DOMDocument('1.0');
                 if (@$doc->loadXML($string)) {
                     $doc->preserveWhiteSpace = false;
@@ -258,7 +271,7 @@ class XMPP2 extends XMPPHP_XMPP
                     //$res = nl2br(htmlspecialchars($res));
                 }
                 file_put_contents($this->logPath, $res, FILE_APPEND);
-                flush();
+                //flush();
             }
         }
     }

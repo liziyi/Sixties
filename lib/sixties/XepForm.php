@@ -29,13 +29,14 @@
 /**
  * XepForm : implement client-side XEP 0004 : data forms
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @version   $Id$
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @version    $Id$
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 class XepForm
 {
@@ -239,13 +240,14 @@ class XepForm
 /**
  * XepFormField : a form field
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @version   $Id$
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @version    $Id$
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 class XepFormField
 {
@@ -292,15 +294,21 @@ class XepFormField
     /**
      * Create a new form field
      *
-     * @param string $var   var
-     * @param mixed  $value value (single value or array)
-     * @param string $type  type
+     * @param string  $var       name of the field
+     * @param mixed   $value     value (single value or array)
+     * @param string  $type      type
+     * @param boolean $required  is the field required ?
+     * @param string  $label     label for the field
+     * @param string  $desc      description for the field
      *
      * @return void
      */
-    public function __construct($var, $value = null, $type = null) {
-        $this->var  = $var;
-        $this->type = $type;
+    public function __construct($var, $value = null, $type = null, $required = false, $label = '', $desc = '') {
+        $this->var      = $var;
+        $this->type     = $type;
+        $this->required = $required;
+        $this->label    = $label;
+        $this->desc     = $desc;
         if ($value !== null) {
             if (is_array($value)) foreach ($value as $val) $this->addValue($val);
             else $this->addValue($value);
