@@ -205,6 +205,7 @@ class WsXepPubsub extends WsXep
      * - server (required)
      * - node (required)
      * - subid (required) subscription id
+     * - jid (optionnal) jid of the user
      *
      * @param array $params parameters
      *
@@ -212,7 +213,7 @@ class WsXepPubsub extends WsXep
      */
     public function subscriptionOptions($params) {
         $this->checkparams(array('node', 'subid'), $params);
-        $this->conn->xep('pubsub')->subscriptionOptionsGet($params['server'], $params['node'], $params['subid']);
+        $this->conn->xep('pubsub')->subscriptionOptionsGet($params['server'], $params['node'], $params['subid'], $params['jid']);
         return $this->process(XepPubsub::EVENT_SUBSCRIPTION_OPTIONS);
     }
     /**
@@ -223,6 +224,7 @@ class WsXepPubsub extends WsXep
      * - node (required)
      * - form (required) the options
      * - subid (required) subscription id
+     * - jid (optionnal) jid of the user
      *
      * @param array $params parameters
      *
@@ -230,7 +232,7 @@ class WsXepPubsub extends WsXep
      */
     public function subscriptionPut($params) {
         $this->checkparams(array('node', 'form', 'subid'), $params);
-        $this->conn->xep('pubsub')->subscriptionOptionsSet($params['server'], $params['node'], $params['form'], $params['subid']);
+        $this->conn->xep('pubsub')->subscriptionOptionsSet($params['server'], $params['node'], $params['form'], $params['subid'], $params['jid']);
         return $this->process(XepPubsub::EVENT_OK);
     }
     /**
@@ -240,6 +242,7 @@ class WsXepPubsub extends WsXep
      * - server (required)
      * - node (required)
      * - subid (required) subscription id
+     * - jid (optionnal) jid of the user
      *
      * @param array $params parameters
      *
@@ -247,8 +250,27 @@ class WsXepPubsub extends WsXep
      */
     public function subscriptionDelete($params) {
         $this->checkparams(array('node', 'subid'), $params);
-        $this->conn->xep('pubsub')->unsubscribe($params['server'], $params['node'], $params['subid']);
+        $this->conn->xep('pubsub')->unsubscribe($params['server'], $params['node'], $params['subid'], $params['jid']);
         return $this->process(XepPubsub::EVENT_SUBSCRIPTION_DELETED);
+    }
+
+    /**
+     * Get the items of a node
+     *
+     * Parameters:
+     * - server (required)
+     * - node (required)
+     * - item (optionnal) item id
+     *
+     * @param array $params parameters
+     *
+     * @return XepResponse
+     *
+     * @UrlMap('server', 'node')
+     */
+    public function itemGet($params) {
+        $this->conn->xep('pubsub')->itemGet($params['server'], $params['node'], $params['item']);
+        return $this->process(XepPubsub::EVENT_ITEMS);
     }
 
     /**
@@ -268,6 +290,26 @@ class WsXepPubsub extends WsXep
         $this->checkparams(array('server', 'node', 'item'), $params);
         $this->conn->xep('pubsub')->itemPublish($params['server'], $params['node'], $params['item'], $params['id']);
         return $this->process(XepPubsub::EVENT_ITEM_PUBLISHED);
+    }
+
+    /**
+     * Delete items
+     *
+     * If item id is null, all items of the node will be erased
+     *
+     * Parameters:
+     * - server (required)
+     * - node (required)
+     * - item (optionnale) item id
+     *
+     * @param array $params parameters
+     *
+     * @return XepResponse
+     */
+    public function itemDelete($params) {
+        $this->checkparams(array('server', 'node', 'item'), $params);
+        $this->conn->xep('pubsub')->itemUnpublish($params['server'], $params['node'], $params['item']);
+        return $this->process(XepPubsub::EVENT_ITEM_DELETED);
     }
 
     /**

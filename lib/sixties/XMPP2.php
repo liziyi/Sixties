@@ -27,6 +27,8 @@
  */
 
 require_once dirname(dirname(__FILE__)) . '/vendors/xmpphp/XMPPHP/XMPP.php';
+require_once dirname(__FILE__) . '/Xep.php';
+require_once dirname(__FILE__) . '/XepForm.php';
 
 /**
  * XMPP2 : some extends to XMPPHP_XMPP for our use
