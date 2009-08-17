@@ -1,0 +1,41 @@
+.form_form{
+    border: 1px solid #888;
+    -moz-border-radius: 10px;
+    margin: 20px;
+    padding : 20px;
+    background-color: #D0D0D0;
+    font-size: 90%;
+}
+.form_title{
+    position: relative;
+    top : -30px;
+    border: 1px solid #888;
+    font-size: 120%;
+    font-weight: bold;
+    display: inline;
+    background-color: white;
+    margin: 0 5px;
+    padding: 5px;
+}
+.form_field_label {
+    display: block;
+    font-style: italic;
+    text-align: left;
+}
+.form_field {
+    width: 100%;
+    margin: 2px;
+    padding: 2px;
+}
+.form_field_required {
+    font-weight: bold;
+}
+.form_field_type_hidden {
+  display: none;
+}
+.form_title + .form_field {
+    margin-top: -15px;
+}
+.form_info {
+  padding: 5px;
+}
