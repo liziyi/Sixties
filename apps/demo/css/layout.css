@@ -8,7 +8,8 @@
 	margin: 5px;
 	padding:5px;
 	width:98%%;
-	font-size: 9px;
+	font-size: 8px;
+	font-family: verdana;
 }
 #body > div {
 	border:1px solid black;
@@ -19,6 +20,7 @@
 	left:20px;
 	position:absolute;
 	width:20%;
+	overflow: auto;
 }
 #col_center {
     margin:0 22%;
@@ -27,6 +29,7 @@
 	position:absolute;
 	right:20px;
 	width:20%;
+    overflow: auto;
 }
 #tabs{
   min-height: 90%;
@@ -55,7 +58,16 @@ a.array_action {
   margin: 0 2px;
   float: left;
 }
+dt {
+	font-weight: bold;
+}
 .ui-tabs .ui-tabs-panel {
 	height: 690px;
 	overflow: auto;
 }
+h3, h4 {
+    border-width: 1px;
+    background-color: #EEE;
+    padding: 5px;
+}
+
