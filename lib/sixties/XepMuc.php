@@ -26,6 +26,9 @@
  * @link      https://labo.clochix.net/projects/show/sixties
  */
 
+/**
+ * Require base Xep class
+ */
 require_once dirname(__FILE__) . "/Xep.php";
 
 /**
@@ -44,12 +47,12 @@ class XepMuc extends Xep
 {
 
     /**
-     * @const base namespace
+     * Base namespace
      */
     const NS = 'http://jabber.org/protocol/muc';
 
-    const EVENT_ITEMS    = 'muc_event_configuration_form';
-
+    const EVENT_ROOM_CREATED = 'muc_event_room_created';
+    const EVENT_CONFIG_FORM  = 'muc_event_configuration_form';
 
     /**
      * @var string the default conference server
@@ -72,32 +75,37 @@ class XepMuc extends Xep
     /**
      * Create a room
      *
+     * @param string $server the muc server name
      * @param string $room   the name of the room
      * @param string $nick   the nickname into thid room
-     * @param string $server the server name
      *
      * @return XepCommand $this
      */
-    public function roomCreate($room, $nick = null, $server = null) {
+    public function roomCreate($server = null, $room, $nick = null) {
         if ($nick == null) $nick = $this->conn->getLogin();
         if ($server == null) $server = $this->mucHost;
-        $req = sprintf("<presence from='%s' to='%s@%s/%s'><x xmlns='%s'/></presence>",
-            $this->conn->getFullJid(), $room, $server, $nick, self::NS);
-        $this->conn->send($req);
+        $room = sprintf("%s@%s/%s", $room, $server, $nick);
+        $msg  = '<x xmlns="' . self::NS . '" />';
+        //@FIXME : presence => no id => won't work :S
+        $this->addCommonHandler(self::EVENT_ROOM_CREATED);
+        $this->conn->sendPresence($room, $msg);
         return $this;
     }
 
     /**
      * Request a room's configuration form
      *
+     * @param string $server the pubsub server name
      * @param string $room   the name of the room
      * @param string $server the server name
      *
      * @return XepCommand $this
      */
-    public function configurationGet($room, $server = null) {
+    public function configurationGet($server = null, $room) {
         if ($server == null) $server = $this->mucHost;
-        $req = array('to' => $room . '@' . $server, 'msg' => "<query xmlns='http://jabber.org/protocol/muc#owner'/>");
+        if (strpos($room, '@') === false) $room = $room . '@' . $server;
+        $req = array('to' => $room, 'msg' => "<query xmlns='http://jabber.org/protocol/muc#owner'/>");
+        $this->addCommonHandler(self::EVENT_CONFIG_FORM);
         $this->conn->sendIq($req);
         return $this;
     }

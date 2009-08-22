@@ -26,6 +26,9 @@
  * @link      https://labo.clochix.net/projects/show/sixties
  */
 
+/**
+ * Require base Xep class
+ */
 require_once dirname(__FILE__) . "/Xep.php";
 
 /**
@@ -44,11 +47,11 @@ class XepDiscover extends Xep
 {
 
     /**
-     * @const event on info result
+     * Info result
      */
     const EVENT_INFO  = 'discover_info_handled';
     /**
-     * @const event on items result
+     * Items result
      */
     const EVENT_ITEMS = 'discover_items_handled';
 
@@ -140,7 +143,7 @@ class XepDiscover extends Xep
             if ($res->code != XepResponse::XEPRESPONSE_KO) {
                 $query   = $xml->sub('query');
                 $node    = $xml->attrs['from'] . ($query->attrs['node'] ? '!' . $query->attrs['node'] : '');
-                $message = array($node => array('identities'=>array(), 'features'=>array()));
+                $message = array($node => array('identities'=>array(), 'features'=>array(), 'meta' => array()));
                 foreach ($query->subs as $sub) {
                     if ($sub->name == 'identity') {
                         $message[$node]['identities'][] = array(
@@ -149,8 +152,16 @@ class XepDiscover extends Xep
                             'type'     => $sub->attrs['type']
                             );
                     }
+                    // Features
                     if ($sub->name == 'feature') {
                         $message[$node]['features'][$sub->attrs['var']] = $sub->attrs['var'];
+                    }
+                    // Meta datas
+                    if ($sub->name == 'x') {
+                        $data = XepForm::load($sub)->getFields();
+                        foreach ($data as $field) {
+                            $message[$node]['meta'][] = $field->getLabel() . ' : ' . implode(',', $field->getValues());
+                        }
                     }
                 }
                 $res->message = $message;

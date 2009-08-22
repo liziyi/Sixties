@@ -26,6 +26,9 @@
  * @link      https://labo.clochix.net/projects/show/sixties
  */
 
+/**
+ * Require bas WsXep class
+ */
 require_once 'WsXep.php';
 
 /**
@@ -127,9 +130,13 @@ class WsXepDisco extends WsXep
                         unset($tmp[0]);
                         $childNode = implode('!', $tmp);
                     }
-                    $child = $this->_servicesGet($childServer, $childNode);
-                    if ($child->code == 200) {
-                        $res->message[$host]['items'] = array_merge_recursive($res->message[$host]['items'], $child->message);
+                    // Recurse only if current node is null (root of the server) or node name of the child is not null.
+                    if (!empty($itemval['node']) || empty($node)) {
+                        $child = $this->_servicesGet($childServer, $childNode);
+                        if ($child->code == 200) {
+                            ksort($res->message[$host]['items']);
+                            $res->message[$host]['items'] = array_merge_recursive($res->message[$host]['items'], $child->message);
+                        }
                     }
                 }
             }

@@ -26,6 +26,9 @@
  * @link      https://labo.clochix.net/projects/show/sixties
  */
 
+/**
+ * Require XMPP library
+ */
 require_once dirname(__FILE__) . '/XMPP2.php';
 
 /**
@@ -81,6 +84,24 @@ class Xep
     }
 
     /**
+     * Register a common id handler
+     *
+     * The result of the next IQ request will thrown a $event
+     *
+     * @param string $event the event to fire
+     *
+     * @return Xep $this
+     */
+    protected function addCommonHandler($event) {
+        $nextid = $this->conn->getNextId();
+        if (!isset($this->conn->history[$nextid])) $this->conn->history[$nextid] = array();
+        $this->conn->history[$nextid]['expected'] = $event;
+        $this->conn->addIdHandler($nextid, 'handlerIdCommon', $this);
+
+        return $this;
+    }
+
+    /**
      * This method should be called prior handling result.  It handles errors
      *
      * @param XMPPHP_XMLObj $xml the result
@@ -109,6 +130,28 @@ class Xep
             return($res);
         } else {
             return(new XepResponse());
+        }
+    }
+
+    /**
+     * Handle misc request response
+     *
+     * If response code is OK, throws the event registered in history for this call
+     *
+     * @param XMPPHP_XMLObj $xml the response
+     *
+     * @return void
+     */
+    public function handlerIdCommon(XMPPHP_XMLObj $xml){
+        try {
+            $res = $this->commonHandler($xml);
+            if ($res->code != XepResponse::XEPRESPONSE_KO) {
+                $res->message = $xml->toString();
+                $this->conn->event($this->conn->history[$xml->attrs['id']]['expected'], $res);
+            }
+        } catch (Exception $e) {
+            $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
+            $this->conn->event(self::EVENT_ERROR, $res);
         }
     }
 }

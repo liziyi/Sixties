@@ -26,6 +26,9 @@
  * @link      https://labo.clochix.net/projects/show/sixties
  */
 
+/**
+ * Require bas WsXep class
+ */
 require_once 'WsXep.php';
 
 /**

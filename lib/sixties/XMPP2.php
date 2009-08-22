@@ -26,20 +26,30 @@
  * @link      https://labo.clochix.net/projects/show/sixties
  */
 
-require_once dirname(dirname(__FILE__)) . '/vendors/xmpphp/XMPPHP/XMPP.php';
+/**
+ * Require base XMPPHP_XMPP class
+ */
+require_once dirname(dirname(__FILE__)) . '/XMPPHP/XMPP.php';
+/**
+ * Require base Xep class
+ */
 require_once dirname(__FILE__) . '/Xep.php';
+/**
+ * Require XepForm class
+ */
 require_once dirname(__FILE__) . '/XepForm.php';
 
 /**
  * XMPP2 : some extends to XMPPHP_XMPP for our use
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @version   $Id$
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage XMPPHP
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @version    $Id$
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 class XMPP2 extends XMPPHP_XMPP
 {
@@ -60,7 +70,7 @@ class XMPP2 extends XMPPHP_XMPP
     public $debugMode = false;
 
     /**
-     * Array to to history of requests and responses
+     * @var array history of requests and responses
      */
     public $history = array();
 
@@ -134,16 +144,16 @@ class XMPP2 extends XMPPHP_XMPP
     }
 
     /**
-     * Get the Jid of the current user
+     * Get the bare JID of the current user
      *
      * @return string
      */
-    public function getBaseJid() {
+    public function getBareJid() {
         return $this->basejid;
     }
 
     /**
-     * Get the full Jid of the current user (with the resource)
+     * Get the full JID of the current user (with the resource)
      *
      * @return string
      */
@@ -196,39 +206,59 @@ class XMPP2 extends XMPPHP_XMPP
      * @return : void
      */
     public function sendIq($params){
+        $lastid = $this->getId();
         $res = $this->send(sprintf('<iq id="%s" from="%s" to="%s" type="%s" >%s</iq>',
-            $this->getId(),
+            $lastid,
             $this->fulljid,
             ($params['to']?$params['to']:$this->host),
             ($params['type']?$params['type']:'get'),
             $params['msg']));
-        $this->history[$this->getLastId()] = array(
-            'sent' => time(),
-            'type' => 'iq'
-        );
+        if (!isset($this->history[$lastid])) $this->history[$lastid] = array();
+        $this->history[$lastid]['sent'] = time();
+        $this->history[$lastid]['type'] = 'iq';
         if ($res === false) throw new XMPPHP_Exception("Error sending iq");
     }
 
     /**
-     * Send a data form
+     * Send a message
      *
-     * @param string  $to   receiver
-     * @param XepForm $form the form
+     * @param string $to      receiver
+     * @param string $message the message
      *
      * @return XMPP2 $this
      */
-    public function sendForm($to, XepForm $form) {
+    public function sendMessage($to, $message) {
+        $lastid = $this->getId();
         $res = $this->send(sprintf('<message from="%s" to="%s" id="%s">%s</message>',
             $this->fulljid,
             $to,
-            $this->getId(),
-            (string)$form));
-
-        $this->history[$this->getLastId()] = array(
-            'sent' => time(),
-            'type' => 'message'
-        );
+            $lastid,
+            $message));
+        if (!isset($this->history[$lastid])) $this->history[$lastid] = array();
+        $this->history[$lastid]['sent'] = time();
+        $this->history[$lastid]['type'] = 'message';
         if ($res === false) throw new XMPPHP_Exception("Error sending message");
+    }
+
+    /**
+     * Send presence
+     *
+     * @param string $to      receiver
+     * @param string $message the message
+     *
+     * @return XMPP2 $this
+     */
+    public function sendPresence($to, $message) {
+        $lastid = $this->getId();
+        $res = $this->send(sprintf('<presence from="%s" to="%s">%s</presence>',
+            $this->fulljid,
+            $to,
+            $message));
+        $lastid = $this->getLastId();
+        if (!isset($this->history[$lastid])) $this->history[$lastid] = array();
+        $this->history[$lastid]['sent'] = time();
+        $this->history[$lastid]['type'] = 'message';
+        if ($res === false) throw new XMPPHP_Exception("Error sending presence");
     }
 
     /**
@@ -298,6 +328,5 @@ class XMPP2 extends XMPPHP_XMPP
             $this->event('form_message_handled', $form);
         }
     }
-
 
 }

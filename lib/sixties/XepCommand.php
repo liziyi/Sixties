@@ -26,6 +26,9 @@
  * @link      https://labo.clochix.net/projects/show/sixties
  */
 
+/**
+ * Require base Xep class
+ */
 require_once dirname(__FILE__) . "/Xep.php";
 
 /**
@@ -48,7 +51,7 @@ class XepCommand extends Xep
     public $commands = array();
 
     /**
-     * @const base namespace
+     * Base namespace
      */
     const NS = 'http://jabber.org/protocol/commands';
 

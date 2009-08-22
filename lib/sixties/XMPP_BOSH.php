@@ -26,14 +26,17 @@
  * @copyright 2008 Nathanael C. Fritz
  */
 
-/** XMPPHP_XMLStream */
+/**
+ * Require base Xep class
+ */
 require_once dirname(__FILE__) . "/XMPP2.php";
 
 /**
  * XMPPHP Main Class
  *
- * @category   xmpphp
- * @package    XMPPHP
+ * @category   Library
+ * @package    Sixties
+ * @subpackage XMPPHP
  * @author     Nathanael C. Fritz <JID: fritzy@netflint.net>
  * @author     Stephan Wentz <JID: stephan@jabber.wentz.it>
  * @author     Michael Garvin <JID: gar@netflint.net>

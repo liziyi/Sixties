@@ -32,7 +32,7 @@
 require_once 'WsXep.php';
 
 /**
- * wsXepSearch : Interface with the Search Module
+ * wsXepSearch : Interface with the MUC Module (Multi User Chat)
  *
  * @category   Library
  * @package    Sixties
@@ -43,40 +43,41 @@ require_once 'WsXep.php';
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
  */
-class WsXepSearch extends WsXep
+class WsXepMuc extends WsXep
 {
 
     /**
-     * Ask for the search criterias
+     * Create a room
      *
      * Parameters:
-     * - jid (required)
+     * - server (optionnal) the muc server
+     * - room   (required) the room name
      *
      * @param array $params parameters
      *
      * @return XepResponse
-     *
-     * @UrlMap({'jid'})
      */
-    public function searchGet($params) {
-        $this->checkparams(array('jid'), $params);
-        $this->conn->xep('search')->searchGet($params['jid']);
-        return $this->process(XepSearch::EVENT_FORM);
+    public function roomPost($params) {
+        $this->checkparams(array('room'), $params);
+        $this->conn->xep('muc')->roomCreate($params['server'], $params['room']);
+        $this->process(XepMuc::EVENT_ROOM_CREATED);
+        return $this->configurationGet($params);
     }
 
     /**
-     * Execute a search
+     * Get the configuration form
      *
      * Parameters:
+     * - server (optionnal) the muc server
+     * - room   (required) the room name
      *
      * @param array $params parameters
      *
      * @return XepResponse
      */
-    public function searchPost($params) {
-        $this->checkparams(array('jid', 'form'), $params);
-        $form = $this->formLoad($params['form']);
-        $this->conn->xep('search')->searchExecute($params['jid'], $form);
-        return $this->process(XepSearch::EVENT_RESULT);
+    public function configurationGet($params){
+        $this->checkparams(array('room'), $params);
+        $this->conn->xep('muc')->configurationGet($params['server'], $params['room']);
+        return $this->process(XepMuc::EVENT_CONFIG_FORM);
     }
 }

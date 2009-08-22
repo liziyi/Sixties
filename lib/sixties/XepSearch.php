@@ -26,6 +26,9 @@
  * @link      https://labo.clochix.net/projects/show/sixties
  */
 
+/**
+ * Require base Xep class
+ */
 require_once dirname(__FILE__) . "/Xep.php";
 
 /**
@@ -48,17 +51,17 @@ require_once dirname(__FILE__) . "/Xep.php";
 class XepSearch extends Xep
 {
     /**
-     * @const base namespace
+     * Base namespace
      */
     const NS = 'jabber:iq:search';
 
     /**
-     * @const EVENT_FORM event thrown when the form is available
+     * Event thrown when the form is available
      */
     const EVENT_FORM   = 'search_event_form';
 
     /**
-     * @const EVENT_RESULT event thrown when the result of a search is available
+     * Event thrown when the result of a search is available
      */
     const EVENT_RESULT = 'search_event_result';
 
