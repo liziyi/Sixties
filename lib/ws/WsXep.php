@@ -1,6 +1,6 @@
 <?php
 /**
- * This file is part of Sixties, a set of classes extending XMPPHP, the PHP XMPP library from Nathanael C Fritz
+ * This file is part of Sixties, a set of PHP classes for playing with XMPP PubSub
  *
  * Copyright (C) 2009  Clochix.net
  *
@@ -18,13 +18,20 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage WebService
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @version    $Id$
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
+
+/**
+ * Require base web services class
+ */
+require_once "WsService.php";
 
 /**
  * WsXep : Base class for the interfaces with Xep API
@@ -38,7 +45,7 @@
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
  */
-class WsXep extends BbRestService
+class WsXep extends WsService
 {
     /**
      * @var XMPP2 the current connection
@@ -110,37 +117,6 @@ class WsXep extends BbRestService
     }
 
     /**
-     * Get the list of all available actions for a module
-     *
-     * @return XepResponse
-     */
-    public function Options() {
-        $useAnnotations = class_exists('UrlMap');
-        $methods = get_class_methods($this);
-        $result  = array();
-        // Get all methods whose name is of the form actionMethod
-        foreach ($methods as $name) {
-            if (preg_match('/([a-z]+)([A-Z]{1}[a-z]+)/', $name, $matches) == 1) {
-                $args = null;
-                if ($useAnnotations) {
-                    $reflection = new ReflectionAnnotatedMethod($this, $name);
-                    $urlmap = $reflection->getAnnotation('UrlMap');
-                    if ($urlmap) {
-                        $args = $urlmap->value;
-                    }
-                }
-                $res = array($matches[2], $args);
-                if (!isset($result[$matches[1]])) {
-                    $result[$matches[1]] = array($res);
-                } else {
-                    $result[$matches[1]][] = $res;
-                }
-            }
-        }
-        return new XepResponse($result, XepResponse::XEPRESPONSE_OK);
-    }
-
-    /**
      * Wait for an event and return the result
      *
      * @param string  $event   the event name
@@ -167,26 +143,7 @@ class WsXep extends BbRestService
         } else {
             $message = 'Unknown error';
         }
-        return new XepResponse($message, XepResponse::XEPRESPONSE_KO);
-    }
-
-    /**
-     * Check the presence of mandatory parameters
-     *
-     * @param array $expected array of expected parameters
-     * @param array $actual   the actual parameters
-     *
-     * @throws 400 on error
-     *
-     * @return boolean
-     */
-    protected function checkparams($expected, $actual) {
-        foreach ($expected as $param) {
-            if (!isset($actual[$param])) {
-                throw new WsException("Missing parameter $param ", 400);
-            }
-        }
-        return true;
+        return new WsResponse($message, WsResponse::WS_RESPONSE_KO);
     }
 
     /**
@@ -216,20 +173,4 @@ class WsXep extends BbRestService
         }
     }
 
-}
-
-/**
- * WsException : Exceptions throwns by the web service
- *
- * @category   Library
- * @package    Sixties
- * @subpackage WebService
- * @author     Clochix <clochix@clochix.net>
- * @copyright  2009 Clochix.net
- * @license    http://www.gnu.org/licenses/gpl.txt GPL
- * @version    $Id$
- * @link       https://labo.clochix.net/projects/show/sixties
- */
-class WsException extends Exception
-{
 }
