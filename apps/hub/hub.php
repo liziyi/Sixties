@@ -6,11 +6,13 @@ if ($argc != 2) {
     echo "Usage : {$argv[0]} [start|reload]\n";
     exit(1);
 }
+
+// Default configuration
 $config = array(
-    'db_dsn' => null,
-    'db_user' => null,
+    'db_dsn'      => null,
+    'db_user'     => null,
     'db_password' => null,
-    'connection' => array(),
+    'connection'  => array(),
 );
 
 /**
@@ -23,17 +25,17 @@ require_once 'config.inc';
  */
 require_once '../../lib/hub/Hub.php';
 
+$logger = BbLogger::get('/tmp/xmpp2.log', BbLogger::DEBUG);
+
 $pidFile = 'hub.pid';
 
 switch ($argv[1]) {
 case 'start':
     $repo = new HubRepo($config['db_dsn'], $config['db_user'], $config['db_password']);
+    $hub  = new Hub($repo);
 
-    $hub = new Hub($repo);
+    $hub->loadConnections();
 
-    foreach ($config['connection'] as $conn) {
-        $hub->addConnection($conn['user'], $conn['host'], $conn['password']);
-    }
     // save current process id
     file_put_contents($pidFile, posix_getpid());
 
@@ -42,7 +44,7 @@ case 'start':
     function sig_handler($signo) {
         global $hub;
         echo "SIGNAL reçu : $signo\n";
-        $hub->reloadHandlers();
+        $hub->loadConnections();
     }
     pcntl_signal(SIGUSR1, "sig_handler");
 

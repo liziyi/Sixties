@@ -30,13 +30,13 @@
 /**
  * Base Xep class
  */
-require_once dirname(dirname(__FILE__)) . "/sixties/Xep.php";
-require_once dirname(dirname(__FILE__)) . "/sixties/XepPubsub.php";
+require_once dirname(dirname(__FILE__)) . '/sixties/Xep.php';
+require_once dirname(dirname(__FILE__)) . '/sixties/XepPubsub.php';
 
 /**
  * Data repository
  */
-require_once dirname(__FILE__) . "/HubRepo.php";
+require_once dirname(__FILE__) . '/HubRepo.php';
 
 /**
  * Hub : bot for managing notifications from a pubsub server
@@ -53,23 +53,22 @@ require_once dirname(__FILE__) . "/HubRepo.php";
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
  */
-class Hub
+class Hub extends BbBase
 {
     /**
-     * List of current connections
-     *
-     * @access protected
-     * @var    array
+     * @var array list of current connections
      */
     protected $conns;
 
     /**
-     * Data repository
-     *
-     * @access protected
-     * @var    repo
+     * @var HubRepo data repository
      */
     protected $repo;
+
+    /**
+     * @var integer Number of seconds between each ping
+     */
+    protected $pingTimeout = 60;
 
     /**
      * Constructor
@@ -79,7 +78,9 @@ class Hub
      * @return void
      */
     public function __construct(HubRepo $repo) {
-        $this->repo = $repo;
+        parent::__construct();
+        $this->repo  = $repo;
+        $this->conns = array();
     }
 
     /**
@@ -102,24 +103,47 @@ class Hub
             $conn->processUntil('session_start');
             $conn->xep('pubsub'); // Dummy call to load pubsub handlers
             // Set a high priority to receive all messages
-            $conn->presence('BubBot', 'available', null, 'invisible', 99);
+            $conn->presence('HubBot', 'available', null, 'invisible', 99);
 
             // load handlers
-            $handlers = array();
-            $res = $this->repo->handlerRead(null, $user . '@' . $host);
-            foreach ($res as $obj) {
-                if (!isset($handlers[$obj->node])) $handlers[$obj->node] = array();
-                $handlers[$obj->node][] = HubHandler::handlerLoad(
-                    $obj->class,
-                    array($obj->jid, $obj->node, $obj->class, $obj->params, $obj->id)
-                );
-            }
+            $handlers = $this->_loadHandlers($user . '@' . $host);
             // save connection
             $this->conns[$conn->getBareJid()] = array('conn' => $conn, 'handlers' => $handlers);
         } catch (Exception $e) {
-            $this->log($e->getMessage());
+            $this->log("Error connecting " . $e->getMessage(), BbLogger::ERROR, 'Hub');
         }
 
+        return $this;
+    }
+
+    /**
+     * Connect all users that have registered handlers
+     *
+     * @return Hub this
+     */
+    public function loadConnections() {
+        try {
+            $this->log("Loading connections", BbLogger::INFO, 'hub');
+            $res = $this->repo->usersGet();
+            foreach ($res as $user) {
+                if (!isset($this->conns[$user->jid])) {
+                    // connect
+                    $this->log("Connecting {$user->jid}", BbLogger::INFO, 'Hub');
+                    $conn = XMPP2::quickConnect($user->jid . '/HubBot', $user->password);
+                    $conn->xep('pubsub'); // Dummy call to load pubsub handlers
+                    // Set a high priority to receive all messages
+                    $conn->presence('HubBot', 'available', null, 'invisible', 99);
+                    // save connection
+                    $this->conns[$user->jid] = array('conn' => $conn, 'handlers' => array());
+                }
+                // load handlers
+                $handlers = $this->_loadHandlers($user->jid);
+                $this->conns[$user->jid]['handlers'] = $handlers;
+            }
+        } catch (Exception $e) {
+            $this->log("Error loading connection" . $e->getMessage(), BbLogger::ERROR, 'hub');
+        }
+        $this->log("Loading connections successful", BbLogger::INFO, 'hub');
         return $this;
     }
 
@@ -133,7 +157,7 @@ class Hub
     public function process($timeout = null) {
         try {
             $end  = ($timeout !== null ? time() + $timeout : time() + 3600);
-            $ping = time() +60; // date of next ping
+            $ping = time() + $this->pingTimeout; // date of next ping
             // Main loop
             while (time() < $end) {
                 foreach ($this->conns as $jid => $conn) {
@@ -150,39 +174,77 @@ class Hub
                             0.01 // the timeout : don't wait if there's nothing new
                         );
                         if (count($events) > 0) {
-                            var_dump($jid, $events);
+                            // new events are available
+                            $this->log("New messages for $jid", BbLogger::INFO, 'hub');
                             foreach ($events as $event) {
                                 try {
+                                    $this->log("Message for $jid : {$event[1]->message}", BbLogger::DEBUG, 'hub');
                                     $eventType = $event[0];
                                     $payload   = simplexml_load_string($event[1]->message);
-                                    $node      = (string)$payload->items[0]['node'];
-                                    if (isset($conn['handlers'][$node])) {
-                                        foreach ($payload->items[0] as $item) {
-                                            foreach ($conn['handlers'][$node] as $handler) {
-                                                $handler->handle($item->asXML());
+                                    if (is_object($payload)) {
+                                        $node  = (string)$payload->items[0]['node'];
+                                        // Search a handler for the node or an ancestor
+                                        $found = isset($conn['handlers'][$node]);
+                                        $pos   = strrpos($node, '/');
+                                        while (!$found && $pos !== false) {
+                                            $node  = substr($node, 0, $pos);
+                                            $found = isset($conn['handlers'][$node]);
+                                            $pos   = strrpos($node, '/');
+                                        }
+                                        if ($found) {
+                                            foreach ($payload->items[0] as $item) {
+                                                foreach ($conn['handlers'][$node] as $handler) {
+                                                    // Fork and handle items in child processes
+                                                    $pid = pcntl_fork();
+                                                    if ($pid == -1) {
+                                                        // fork unsuccess, handle the event ourself
+                                                        $this->log("Hub was enable to fork", BbLogger::ERROR, 'hub');
+                                                        $handler->handle($item->asXML());
+                                                    } elseif ($pid == 0) {
+                                                        $this->log("Child process started", BbLogger::DEBUG, 'hub');
+                                                        try {
+                                                            // child process : handle the event
+                                                            $this->log(sprintf("Handling event with handler %d (%s)", $handler->getId(), $handler->getHandler()), BbLogger::DEBUG, 'Hub');
+                                                            $handler->handle($item->asXML());
+                                                            $this->log(sprintf("Handling ok with handler %d (%s)", $handler->getId(), $handler->getHandler()), BbLogger::DEBUG, 'Hub');
+                                                        } catch (Exception $e) {
+                                                            $this->log("Error handling event for $jid " . $e->getMessage(), BbLogger::ERROR, 'Hub');
+                                                        }
+                                                        $this->log("Child process exciting", BbLogger::DEBUG, 'hub');
+                                                        exit;
+                                                    } else {
+                                                        // parent process, nothing to do
+                                                    }
+                                                }
                                             }
+                                        } else {
+                                            $this->log("No handlers for node $node for $jid", BbLogger::WARNING, 'hub');
                                         }
                                     } else {
-                                        echo "No handlers for node $node for $jid\n";
+                                        $this->log("Bad payload : " . $event[1]->message, BbLogger::ERROR, 'hub');
                                     }
                                 } catch (Exception $e) {
-                                    // @TODO
-                                    var_dump($e->getMessage());
+                                    $this->log("Error handling event for $jid " . $e->getMessage(), BbLogger::ERROR, 'hub');
                                 }
                             }
                         }
                     } catch (Exception $e) {
-                        // @TODO
-                        var_dump($e->getMessage());
+                        $this->log("Error getting notifications for $jid " . $e->getMessage(), BbLogger::ERROR, 'hub');
                     }
                 }
+                $conn['conn']->presence('HubBot', 'available', null, 'available', 99);
+                echo '+';
                 // sleep for 5000ms
                 usleep(5000000);
+
+                // if ping timeout reached, send a ping request to avoid disconnection
                 if (time() > $ping) {
                     foreach ($this->conns as $jid => $conn) {
+                        $this->log("Pinging $jid", BbLogger::DEBUG, 'hub');
                         $conn['conn']->xep('ping')->ping();
+                        $this->log("Pinging $jid ok", BbLogger::DEBUG, 'hub');
                     }
-                    $ping = time() +60;
+                    $ping = time() + $this->pingTimeout;
                 }
                 echo '.';
             }
@@ -191,8 +253,7 @@ class Hub
                 $conn['conn']->disconnect();
             }
         } catch (Exception $e) {
-            //@TODO
-            var_dump($e->getMessage());
+            $this->log("Error in hub main loop " . $e->getMessage(), BbLogger::ERROR, 'hub');
         }
         return $this;
     }
@@ -202,36 +263,46 @@ class Hub
      *
      * @return Hub this
      */
+    /*
     public function reloadHandlers() {
-        echo "Reloading handlers ";
-        foreach ($this->conns as $jid => $conn) {
-            // load handlers
-            $handlers = array();
-            $res = $this->repo->handlerRead(null, $jid);
-            foreach ($res as $obj) {
-                if (!isset($handlers[$obj->node])) $handlers[$obj->node] = array();
-                $handlers[$obj->node][] = HubHandler::handlerLoad(
-                    $obj->class,
-                    array($obj->jid, $obj->node, $obj->class, $obj->params, $obj->id)
-                );
-                echo '.';
+        try {
+            $this->log("Reloading handlers", BbLogger::INFO, 'hub');
+            foreach ($this->conns as $jid => $conn) {
+                // load handlers
+                $handlers = $this->_loadHandlers($jid);
+                // save connection
+                $this->conns[$jid]['handlers'] = $handlers;
             }
-            // save connection
-            $this->conns[$jid]['handlers'] = $handlers;
+        } catch (Exception $e) {
+            $this->log("Error reloading handlers" . $e->getMessage(), BbLogger::ERROR, 'hub');
         }
-        echo "done\n";
+        $this->log("Reloading handlers successful", BbLogger::INFO, 'hub');
         return $this;
     }
-
+    */
     /**
-     * Log a message
+     * Load the handlers registered by a user
      *
-     * @param string $message the message to log
+     * @param string $jid JID of the user
      *
-     * @return void;
+     * @return array
      */
-    protected function log($message) {
-        //@TODO : implement logger !
-        echo "$message\n";
+    private function _loadHandlers($jid) {
+        $handlers = array();
+        $res = $this->repo->handlerRead(null, $jid, null, true);
+        foreach ($res as $obj) {
+            try {
+                if (!isset($handlers[$obj->node])) $handlers[$obj->node] = array();
+                $handler = HubHandler::handlerLoad(
+                    $obj->class,
+                    array($obj->jid, $obj->password, $obj->node, $obj->class, $obj->params, $obj->id)
+                );
+                $handlers[$obj->node][] = $handler;
+            } catch (Exception $e) {
+                $this->log("Error loading for {$obj->jid} on {$jis->node} : " . $e->getMessage(), BbLogger::ERROR, 'hub');
+            }
+        }
+
+        return $handlers;
     }
 }

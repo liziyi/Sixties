@@ -28,21 +28,7 @@
  */
 
 /**
- * Load CURL extension
- */
-if (!extension_loaded('curl')) {
-    if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-        throw new Exception("Using windows is such a bad idea... Check if CURL is available and remove this line");
-        dl('ssleay32.dll');
-        dl('libeay32.dll');
-        dl('php_curl.dll');
-    } else {
-        dl('curl.so');
-    }
-}
-
-/**
- * HubHandlerWebhook : call a web hook
+ * HubHandlerMail : send a mail
  *
  * @category   Library
  * @package    Sixties
@@ -53,8 +39,14 @@ if (!extension_loaded('curl')) {
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
  */
-class HubHandlerWebhook extends HubHandler
+class HubHandlerMail extends HubHandler
 {
+    /**
+     * @var string $sender email address of the mail sender
+     * @todo initialize sender
+     */
+    private $_sender = 'hubot@clochix.net';
+
     /**
      * Constructor
      *
@@ -74,47 +66,30 @@ class HubHandlerWebhook extends HubHandler
             parent::__construct($jid, $password, $node, $handler, $params, $id);
 
             // Initialize fields
-            $this->fields['url']    = new XepFormField('url', null, XepFormField::FIELD_TYPE_TEXTSINGLE, true, 'url');
-            $this->fields['var']    = new XepFormField('var', null, XepFormField::FIELD_TYPE_TEXTSINGLE, true, 'var name');
-            $this->fields['method'] = new XepFormField('method', null, XepFormField::FIELD_TYPE_LISTSINGLE, false, 'method');
-            $this->fields['method']->setOptions(
-                array(
-                    array('label'=>'GET', 'value'=>'GET'),
-                    array('label'=>'POST', 'value'=>'POST')
-                )
-            );
+            $this->fields['to']      = new XepFormField('to', null, XepFormField::FIELD_TYPE_TEXTMULTI, true, 'To');
+            $this->fields['subject'] = new XepFormField('subject', null, XepFormField::FIELD_TYPE_TEXTSINGLE, true, 'Subject');
+            $this->fields['header']  = new XepFormField('header', null, XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Header');
+            $this->fields['footer']  = new XepFormField('footer', null, XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Footer');
 
             $this->paramsCheck($params);
         }
     }
 
     /**
-     * Send the event to an url
+     * Send the event by email
      *
      * @param string $event the event
      *
      * @return HubHandler this
      */
     public function handle($event) {
-        $ch = curl_init();
-
-        $params = array($this->params['var'] => $event);
-
-        switch ($this->params['method']) {
-        case 'GET':
-            curl_setopt($ch, CURLOPT_URL, $this->params['url'] . '?' . http_build_query($params));
-            curl_setopt($ch, CURLOPT_HTTPGET, true);
-            break;
-        case 'POST':
-            curl_setopt($ch, CURLOPT_URL, $this->params['url']);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $params);
-        }
-        curl_setopt($ch, CURLOPT_HEADER, 0);
-
-        curl_exec($ch);
-        curl_close($ch);
-
+        $dests    = implode(',', explode('\n', $this->params['to']));
+        $headers  = "MIME-Version: 1.0\r\n";
+        $headers .= "Content-type: text/plain; charset=utf-8\r\n";
+        $headers .= "To: $dests\r\n";
+        $headers .= "From: {$this->_sender}\r\n";
+        $message  = sprintf("%s\n\n%s\n\n%s\n", $this->params['header'], $event, $this->params['footer']);
+        mail($dests, $this->params['subject'], $message, $headers);
         return $this;
     }
 

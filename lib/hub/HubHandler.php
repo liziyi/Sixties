@@ -28,6 +28,11 @@
  */
 
 /**
+ * Common classes
+ */
+require_once dirname(dirname(__FILE__)) . '/bb/BbCommon.php';
+
+/**
  * We use XepFormFields
  */
 require_once dirname(dirname(__FILE__)) . '/sixties/XepForm.php';
@@ -44,26 +49,30 @@ require_once dirname(dirname(__FILE__)) . '/sixties/XepForm.php';
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
  */
-class HubHandler
+class HubHandler extends BbBase
 {
     /**
-     * @var string $id internal handler id
+     * @var string internal handler id
      */
     protected $id;
     /**
-     * @var string $jid
+     * @var string JID
      */
     protected $jid;
     /**
-     * @var string $node
+     * @var string password
+     */
+    protected $password;
+    /**
+     * @var string node
      */
     protected $node;
     /**
-     * @var string $handler class name of the handler
+     * @var string class name of the handler
      */
     protected $handler;
     /**
-     * @var array $params parameters of by the handler
+     * @var array parameters of the handler
      */
     protected $params;
     /**
@@ -74,20 +83,23 @@ class HubHandler
     /**
      * Constructor
      *
-     * @param string  $jid     JID
-     * @param string  $node    node name
-     * @param string  $handler class name of the handler
-     * @param array   $params  parameters needed by the handler
-     * @param integer $id      internal handler id
+     * @param string  $jid      JID
+     * @param string  $password user's password
+     * @param string  $node     node name
+     * @param string  $handler  class name of the handler
+     * @param array   $params   parameters needed by the handler
+     * @param integer $id       internal handler id
      *
      * @return void
      */
-    public function __construct($jid, $node, $handler, $params, $id = null) {
-        $this->id      = $id;
-        $this->jid     = $jid;
-        $this->node    = $node;
-        $this->handler = $handler;
-        $this->params  = $params;
+    public function __construct($jid, $password, $node, $handler, $params, $id = null) {
+        parent::__construct();
+        $this->id       = $id;
+        $this->jid      = $jid;
+        $this->password = $password;
+        $this->node     = $node;
+        $this->handler  = $handler;
+        $this->params   = $params;
     }
 
     /**
@@ -126,6 +138,25 @@ class HubHandler
      */
     public function setJid($jid) {
         $this->jid = $jid;
+        return $this;
+    }
+    /**
+     * Get the user password
+     *
+     * @return string
+     */
+    public function getPassword() {
+        return $this->password;
+    }
+    /**
+     * Set the user password
+     *
+     * @param string $password the user password
+     *
+     * @return HubHandler this
+     */
+    public function setPassword($password) {
+        $this->password = $password;
         return $this;
     }
     /**
@@ -187,7 +218,7 @@ class HubHandler
     }
 
     /**
-     * Check the presence of mandatory parameters
+     * Check the presence of mandatory parameters, and set the values of the fields
      *
      * @param array $actual the actual parameters
      *
@@ -195,11 +226,14 @@ class HubHandler
      *
      * @return boolean
      */
-    protected function checkparams($actual) {
-        if (!is_array($actual)) $actual = array();
+    protected function paramsCheck($actual) {
+        if (!is_array($actual)) return false;
         foreach ($this->fields as $paramkey => $paramval) {
-            if (!isset($actual[$paramkey])/* && $paramval->getRequired()*/) {
+            if (!isset($actual[$paramkey]) && $paramval->getRequired()) {
                 throw new WsException("Missing parameter $paramkey ", 400);
+            }
+            if (isset($actual[$paramkey])) {
+                $this->fields[$paramkey]->addValue($actual[$paramkey]);
             }
         }
         return true;
@@ -222,7 +256,7 @@ class HubHandler
      * @return array of class names
      */
     final static public function handlersGet() {
-        return ('Webhook');
+        return (array('Jabber', 'Mail', 'Webhook'));
     }
 
     /**
@@ -233,7 +267,7 @@ class HubHandler
      *
      * @return HubHandler
      */
-    final static public function handlerLoad($class, $params) {
+    final static public function handlerLoad($class, $params = null) {
         $handler = null;
         $classname = 'HubHandler' . ucfirst($class);
         if (!class_exists($classname)) {
@@ -247,8 +281,21 @@ class HubHandler
             $handler = @new $classname();
             call_user_func_array(array($handler, '__construct'), $params);
         } else {
-            //@TODO
+            $this->log("Unable to load handler for non existing class {$classname}", BbLogger::ERROR, 'HubHandler');
         }
         return $handler;
+    }
+
+    /**
+     * Get the XML model of a form for editing a handler
+     *
+     * @return string
+     */
+    final public function formLoad() {
+        $form = new XepForm();
+        foreach ($this->fields as $field) {
+            $form->addField($field);
+        }
+        return (string)$form;
     }
 }

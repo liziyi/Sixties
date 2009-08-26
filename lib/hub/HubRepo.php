@@ -44,7 +44,7 @@ require_once 'HubHandler.php';
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
  */
-class HubRepo
+class HubRepo extends BbBase
 {
     /**
      * @var PDO $dbh the PDO database handler
@@ -59,16 +59,13 @@ class HubRepo
      * @param string $password database password
      */
     public function __construct($dsn, $user = null, $password = null) {
+        parent::__construct();
         // Connect
         try {
             $this->dbh = new PDO($dsn, $user, $password);
             $this->dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        } catch (PDOException $e) {
-            //@TODO
-            var_dump($e->getMessage());
         } catch (Exception $e) {
-            //@TODO
-            var_dump($e->getMessage());
+            $this->log("Error connecting to repository : " . $e->getMessage(), BbLogger::ERROR, 'HubRepo');
         }
     }
 
@@ -90,18 +87,16 @@ class HubRepo
      */
     public function handlerCreate(HubHandler $handler) {
         try {
-            $stmt = $this->dbh->prepare("INSERT INTO HANDLERS (jid, node, class, params) VALUES (:jid, :node, :class, :params)");
+            $stmt = $this->dbh->prepare("INSERT INTO HANDLERS (jid, password, node, class, params) VALUES (:jid, :password, :node, :class, :params)");
             $stmt->bindValue(':jid', $handler->getJid(), PDO::PARAM_STR);
+            $stmt->bindValue(':password', $handler->getPassword(), PDO::PARAM_STR);
             $stmt->bindValue(':node', $handler->getNode(), PDO::PARAM_STR);
             $stmt->bindValue(':class', $handler->getHandler(), PDO::PARAM_STR);
             $stmt->bindValue(':params', serialize($handler->getParams()), PDO::PARAM_STR);
             $stmt->execute();
-        } catch (PDOException $e) {
-            //@TODO
-            var_dump($e->getMessage());
         } catch (Exception $e) {
-            //@TODO
-            var_dump($e->getMessage());
+            $this->log("Error creating handler : " . $e->getMessage(), BbLogger::ERROR, 'HubRepo');
+            throw new Exception("Internal error when creating handler");
         }
         return $this;
     }
@@ -111,20 +106,24 @@ class HubRepo
      * If id is null, return all handlers of a user (for a node if node is not null)
      * If id and jid are null, return all handlers
      *
-     * @param integer $id   internal handler id
-     * @param string  $jid  JID (mandatory)
-     * @param string  $node node name
+     * @param integer $id       internal handler id
+     * @param string  $jid      JID (mandatory)
+     * @param string  $node     node name
+     * @param boolean $password true to include password
      *
      * @return array of {@link HubHandler}
      */
-    public function handlerRead($id = null, $jid = null, $node = null) {
+    public function handlerRead($id = null, $jid = null, $node = null, $password = false) {
         try {
             $res = array();
-            $req = 'SELECT id, jid, node, class, params FROM HANDLERS ';
+            $req = 'SELECT id, jid, password, node, class, params FROM HANDLERS ';
             if ($id !== null) {
                 $req .= ' WHERE id = :id';
+                // security : be sure to only get handlers of this user
+                if ($jid != null) $req .= ' AND jid = :jid';
                 $stmt = $this->dbh->prepare($req);
-                $stmt->bindValue(':id', $jid, PDO::PARAM_INT);
+                $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+                if ($jid != null) $stmt->bindValue(':jid', $id, PDO::PARAM_STR);
             } elseif ($jid != null) {
                 $req .= ' WHERE jid = :jid';
                 if ($node !== null) $req .= ' AND node = :node';
@@ -137,15 +136,13 @@ class HubRepo
             if ($stmt->execute()) {
                 while ($row = $stmt->fetch(PDO::FETCH_OBJ)) {
                     $row->params = unserialize($row->params);
+                    if (!$password) $row->password = null;
                     $res[] = $row;
                 }
             }
-        } catch (PDOException $e) {
-            //@TODO
-            var_dump($e->getMessage());
         } catch (Exception $e) {
-            //@TODO
-            var_dump($e->getMessage());
+            $this->log("Error reading handler : " . $e->getMessage(), BbLogger::ERROR, 'HubRepo');
+            throw new Exception("Internal error when reading handler");
         }
         return $res;
     }
@@ -158,17 +155,17 @@ class HubRepo
      */
     public function handlerUpdate(HubHandler $handler) {
         try {
-            $stmt = $this->dbh->prepare("UPDATE HANDLERS SET class = :class, params = :params WHERE id = :id");
+            $req = 'UPDATE HANDLERS SET class = :class, params = :params WHERE id = :id';
+            if ($handler->getJid() != null) $req .= ' AND jid = :jid';
+            $stmt = $this->dbh->prepare($req);
             $stmt->bindValue(':id', $handler->getId(), PDO::PARAM_INT);
             $stmt->bindValue(':class', $handler->getHandler(), PDO::PARAM_STR);
             $stmt->bindValue(':params', serialize($handler->getParams()), PDO::PARAM_STR);
+            if ($handler->getJid() != null) $stmt->bindValue(':jid', $handler->getJid(), PDO::PARAM_STR);
             $stmt->execute();
-        } catch (PDOException $e) {
-            //@TODO
-            var_dump($e->getMessage());
         } catch (Exception $e) {
-            //@TODO
-            var_dump($e->getMessage());
+            $this->log("Error updating handler : " . $e->getMessage(), BbLogger::ERROR, 'HubRepo');
+            throw new Exception("Internal error when updating handler");
         }
         return $this;
     }
@@ -181,16 +178,38 @@ class HubRepo
      */
     public function handlerDelete(HubHandler $handler) {
         try {
-            $stmt = $this->dbh->prepare("DELETE FROM HANDLERS WHERE id = :id");
+            $req = 'DELETE FROM HANDLERS WHERE id = :id';
+            if ($handler->getJid() != null) $req .= ' AND jid = :jid';
+            $stmt = $this->dbh->prepare($req);
             $stmt->bindValue(':id', $handler->getId(), PDO::PARAM_INT);
+            if ($handler->getJid() != null) $stmt->bindValue(':jid', $handler->getJid(), PDO::PARAM_STR);
             $stmt->execute();
-        } catch (PDOException $e) {
-            //@TODO
-            var_dump($e->getMessage());
         } catch (Exception $e) {
-            //@TODO
-            var_dump($e->getMessage());
+            $this->log("Error deleting handler : " . $e->getMessage(), BbLogger::ERROR, 'HubRepo');
+            throw new Exception("Internal error when deleting handler");
         }
         return $this;
+    }
+
+    /**
+     * Get the list of user with registered handlers
+     *
+     * @return array of objects
+     */
+    public function usersGet() {
+        try {
+            $res  = array();
+            $req  = 'SELECT distinct jid, password FROM HANDLERS';
+            $stmt = $this->dbh->prepare($req);
+            if ($stmt->execute()) {
+                while ($row = $stmt->fetch(PDO::FETCH_OBJ)) {
+                    $res[] = $row;
+                }
+            }
+        } catch (Exception $e) {
+            $this->log("Error reading users : " . $e->getMessage(), BbLogger::ERROR, 'HubRepo');
+            throw new Exception("Internal error when reading handler");
+        }
+        return $res;
     }
 }
