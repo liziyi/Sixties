@@ -18,13 +18,19 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   WS
+ * @package    Sixties
+ * @subpackage Rest
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
+
+/**
+ * Common classes
+ */
+require_once $basepath . '/lib/bb/BbCommon.php';
 
 /**
  * Define a new UrlMap annotation to map parameters in the url with parameters of the method
@@ -35,7 +41,7 @@ class UrlMap extends Annotation {}
 /**
  * BbRest : base for RESTful web services
  *
- * @category   Library
+ * @category   WS
  * @package    Sixties
  * @subpackage Rest
  * @author     Clochix <clochix@clochix.net>
@@ -44,7 +50,7 @@ class UrlMap extends Annotation {}
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
  */
-class BbRest
+class BbRest extends BbBase
 {
     const HTTP_OK                 = 200;
     const HTTP_BAD_REQUEST        = 400;
@@ -75,6 +81,7 @@ class BbRest
      * @return void
      */
     public function __construct($mapping, $config) {
+        parent::__construct();
         $this->_mapping = (is_array($mapping) ? $mapping : array());
         $this->_config  = (is_array($config) ? $config : array());
         // content negociation
@@ -90,7 +97,6 @@ class BbRest
                 $this->format = 'json';
                 break;
             }
-            // TODO : should we return HTTP_NOT_ACCEPTABLE if not foud ?
         }
     }
 
@@ -178,12 +184,12 @@ class BbRest
             }
 
             // Create the class and call the method
-            $class = new $classname($this->_config);
+            $class = new $classname($this->_config, $this->loggerGet());
+
             $res = $class->$methodname($args);
-            //@FIXME : use a more generic class than XepResponse
-            if ($res instanceof XepResponse) {
+            if ($res instanceof BbResponse) {
                 // try to recover on error
-                if ($res->code == self::HTTP_INTERNAL) {
+                if ($res->code == WsResponse::KO) {
                     if ($res->message['code'] == self::HTTP_UNAVAILABLE) {
                         // service unavailable, wait a little and let it a second chance
                         usleep(1000);
@@ -193,9 +199,11 @@ class BbRest
             }
 
         } catch (WsException $e) {
-            $this->renderResponse($e->getMessage(), $e->getCode());
+            // error of the application, not the service itself => return code will be ok (200)
+            $this->renderResponse(new WsResponse($e->getMessage(), $e->getCode()), self::HTTP_OK);
             return false;
         } catch (Exception $e) {
+            // unexpected error => 500
             $this->renderResponse($e->getMessage(), self::HTTP_INTERNAL);
             return false;
         }
@@ -262,26 +270,4 @@ class BbRest
         }
     }
 
-}
-
-/**
- * BbRestService : base for all classes called by BbRest
- *
- * @category   Library
- * @package    Sixties
- * @subpackage Rest
- * @author     Clochix <clochix@clochix.net>
- * @copyright  2009 Clochix.net
- * @license    http://www.gnu.org/licenses/gpl.txt GPL
- * @version    $Id$
- * @link       https://labo.clochix.net/projects/show/sixties
- */
-abstract class BbRestService
-{
-    /**
-     * Get the list of all available actions for a module
-     *
-     * @return mixed
-     */
-    abstract public function Options();
 }

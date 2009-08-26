@@ -38,24 +38,35 @@
         </xsl:variable>
         <xsl:element name="div">
             <xsl:attribute name="class">form_field<xsl:if test="./data:required"> form_field_required</xsl:if> form_field_type_<xsl:value-of select="@type"/></xsl:attribute>
-            <xsl:if test="@label!=''">
-                <xsl:element name="label">
-                    <xsl:attribute name="class">form_field_label</xsl:attribute>
-                    <xsl:attribute name="for"><xsl:value-of select="$field_id"/></xsl:attribute>
-                    <xsl:value-of select="@label"/>
-                </xsl:element>
-            </xsl:if>
+            <!-- -=-=-=-=-= LABEL =-=-=-=-=- -->
+            <!-- If no label, use field name as label -->
+            <xsl:variable name="field_label">
+                <xsl:choose>
+                    <xsl:when test="not(@label) or @label=''">
+                        <xsl:value-of select="@var"/>
+                    </xsl:when>
+                    <xsl:otherwise>
+                        <xsl:value-of select="@label"/>
+                    </xsl:otherwise>
+                </xsl:choose>
+            </xsl:variable>
+            <xsl:element name="label">
+                <xsl:attribute name="class">form_field_label</xsl:attribute>
+                <xsl:attribute name="for"><xsl:value-of select="$field_id"/></xsl:attribute>
+                <xsl:value-of select="$field_label"/>
+            </xsl:element>
             <xsl:choose>
                 <!-- -=-=-=-=-= BOOLEAN =-=-=-=-=- -->
                 <xsl:when test="@type='boolean'">
                     <xsl:variable name="field_value">
                         <xsl:value-of select="./data:value/text()"/>
                     </xsl:variable>
+                    <!-- Openfire doesn't support true and false, use 1 and 0 instead -->
                     <xsl:element name="input">
                         <xsl:attribute name="type">radio</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
                         <xsl:attribute name="id"><xsl:value-of select="$field_id"/>_1</xsl:attribute>
-                        <xsl:attribute name="value">true</xsl:attribute>
+                        <xsl:attribute name="value">1</xsl:attribute>
                         <xsl:if test="$field_value='1' or $field_value='true'">
                             <xsl:attribute name="checked">checked</xsl:attribute>
                         </xsl:if>
@@ -68,7 +79,7 @@
                         <xsl:attribute name="type">radio</xsl:attribute>
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
                         <xsl:attribute name="id"><xsl:value-of select="$field_id"/>_0</xsl:attribute>
-                        <xsl:attribute name="value">false</xsl:attribute>
+                        <xsl:attribute name="value">0</xsl:attribute>
                         <xsl:if test="$field_value='0' or $field_value='false'">
                             <xsl:attribute name="checked">checked</xsl:attribute>
                         </xsl:if>
@@ -182,8 +193,21 @@
                     <xsl:element name="select">
                         <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
                         <xsl:attribute name="id"><xsl:value-of select="$field_id"/></xsl:attribute>
+                        <!-- If no value, create an empty option -->
                         <xsl:if test="count(data:value)!=1">
                             <option value="" selected="selected"></option>
+                        </xsl:if>
+                        <!--
+                        Dirty fix for list-single with value but without options 
+                         -->
+                        <xsl:if test="count(data:option)=0 and count(data:value)=1">
+                            <xsl:element name="option">
+                                <xsl:attribute name="value">
+                                    <xsl:value-of select='data:value'/>
+                                </xsl:attribute>
+                                 <xsl:attribute name="selected">selected</xsl:attribute>
+                                <xsl:value-of select='data:value'/>
+                            </xsl:element>
                         </xsl:if>
                         <xsl:for-each select="data:option">
                             <xsl:variable name="field_option_value">
@@ -238,7 +262,7 @@
                     </xsl:element>
                 </xsl:when>
                 <!-- -=-=-=-=-= TEXT-SINGLE =-=-=-=-=- -->
-                <xsl:when test="@type='text-single'">
+                <xsl:when test="@type='text-single' or not(@type)">
                     <xsl:element name="input">
                         <xsl:attribute name="type">text</xsl:attribute>
                         <xsl:attribute name="size">40</xsl:attribute>
@@ -250,6 +274,15 @@
                     </xsl:element>
                 </xsl:when>
                 <xsl:otherwise>
+                    <xsl:element name="input">
+                        <xsl:attribute name="type">text</xsl:attribute>
+                        <xsl:attribute name="size">40</xsl:attribute>
+                        <xsl:attribute name="name"><xsl:value-of select="$field_name"/></xsl:attribute>
+                        <xsl:attribute name="id"><xsl:value-of select="$field_id"/></xsl:attribute>
+                        <xsl:attribute name="value">
+                            <xsl:value-of select="data:value"/>
+                        </xsl:attribute>
+                    </xsl:element>
                 </xsl:otherwise>
             </xsl:choose>
             <xsl:if test="./data:required">

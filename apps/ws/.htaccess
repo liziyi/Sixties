@@ -1,6 +1,6 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteRule ^(.*\..{3})$.* - [L]
+    RewriteRule ^(.*\.(php|xsl))$.* - [L]
     RewriteRule ^(.*)$ index.php [QSA,L,NE]
 </IfModule>
  
