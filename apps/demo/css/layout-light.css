@@ -1,0 +1,23 @@
+#col_center {
+    margin:0 22% 0 0;
+    overflow: auto;
+}
+#col_right {
+    position:absolute;
+    right:20px;
+    width:20%;
+    overflow: auto;
+}
+#nodes_list td {
+	vertical-align: top;
+}
+#nodes_list th {
+    width: 33%;
+}
+#nodes_list ul {
+	list-style: none;
+	padding: 0;
+}
+#nodes_list li, #nodes_list p {
+    clear: both;
+}

@@ -16,25 +16,6 @@
 	height:750px;
 	padding:2px 5px;
 }
-#col_left {
-	left:20px;
-	position:absolute;
-	width:20%;
-	overflow: auto;
-}
-#col_center {
-    margin:0 22%;
-}
-#col_right {
-	position:absolute;
-	right:20px;
-	width:20%;
-    overflow: auto;
-}
-#tabs{
-  min-height: 90%;
-}
-
 #messages {
   list-style-type: none;
   padding: 5px;
@@ -60,10 +41,6 @@ a.array_action {
 }
 dt {
 	font-weight: bold;
-}
-.ui-tabs .ui-tabs-panel {
-	height: 690px;
-	overflow: auto;
 }
 h3, h4 {
     border-width: 1px;

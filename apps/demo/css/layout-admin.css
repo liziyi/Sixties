@@ -1,0 +1,22 @@
+#col_left {
+    left:20px;
+    position:absolute;
+    width:20%;
+    overflow: auto;
+}
+#col_center {
+    margin:0 22%;
+}
+#col_right {
+    position:absolute;
+    right:20px;
+    width:20%;
+    overflow: auto;
+}
+#tabs{
+  min-height: 90%;
+}
+.ui-tabs .ui-tabs-panel {
+	height: 690px;
+	overflow: auto;
+}

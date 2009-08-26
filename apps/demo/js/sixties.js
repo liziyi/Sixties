@@ -38,16 +38,49 @@
  * @license    http://www.gnu.org/licenses/gpl.txt GPL
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
+ * 
+ * @param {String} aBaseUrl base URL of the web services
+ * @param {String} aContext 'admin' or 'light'
  */
-function BbXmpp(pBaseUrl){
-  var _instance = this;
-  var _baseUrl  = pBaseUrl;
-  var _wsServices = {};
+function BbXmpp(aBaseUrl, aContext){
 
+  /////////////////////////////////////////////////////////////////////////////////////////
+  //
+  // PRIVATE PROPERTIES
+  //
+  /////////////////////////////////////////////////////////////////////////////////////////
+  
+  var _instance = this;
+  var _baseUrl  = aBaseUrl;
+  var _context  = aContext;
+  var _wsServices = {};
+  /**
+   * Default sunscription option
+   */
+  var _defaultSubscriptionOption = {
+      'pubsub#deliver': 1,
+      'pubsub#digest': 0,
+      'pubsub#include_body': 1,
+      'pubsub#show-values': ['chat', 'online'],
+      'pubsub#subscription_type' : 'items',
+      'pubsub#subscription_depth' : 'all'
+  };
   /**
    * Current user
    */
   var _user;
+  /**
+   * Handlers of the current user
+   */
+  var _handlers = {};
+  /**
+   * Subscriptions by users
+   */
+  var _subsByUser = {};
+  /**
+   * Subscriptions by node
+   */
+  var _subsByNode = {};
   /**
    * Auth string
    */
@@ -58,6 +91,12 @@ function BbXmpp(pBaseUrl){
    */
   this.current_node = null;
 
+  /////////////////////////////////////////////////////////////////////////////////////////
+  //
+  // PRIVATE METHODS
+  //
+  /////////////////////////////////////////////////////////////////////////////////////////
+  
   /**
    * Display a message
    * 
@@ -66,7 +105,7 @@ function BbXmpp(pBaseUrl){
    * 
    * @returns {jQuery} a jQuery object with the HTML message
    */
-  var _message = function _message(message, type) {
+  function _message(message, type) {
     var msg  = $('<li class="ui-corner-all"></li>'); 
     var icon = $('<span style="float: left; margin: 0 0.3em;" class="ui-icon "/>');
     if (type=='error') {
@@ -79,7 +118,7 @@ function BbXmpp(pBaseUrl){
     msg.append(icon).append(message);
     msg.click(function(){$(this).remove();});
     return $('#messages').prepend(msg).children().eq(0);
-  };
+  }
   /**
    * Add some headers to the request before it is sent
    *
@@ -102,8 +141,10 @@ function BbXmpp(pBaseUrl){
    */
   var _handleResponse = function _handleResponse(res, handler, desc) {
     desc = (desc?desc + ' : ': '');
-    if (res['code'] != '200' || typeof res.message == 'undefined') {
-      _message(desc + "Service error " + res['code']);
+    if (res['code'] != '200' || typeof res['message'] == 'undefined') {
+      desc += "Service error " + res['code'];
+      if (typeof res['message'] == 'string') desc += ' ' + res['message'];
+      _message(desc);
     } else if (res.message['code'] != '200' || typeof res.message.message == 'undefined') {
       var error_message = '';
       if (typeof res.message.message == 'string') error_message = res.message.message;
@@ -111,7 +152,7 @@ function BbXmpp(pBaseUrl){
       _message(desc + "Module error " + res.message['code'] + ' ' + error_message, 'error');
     } else {
       if (desc !== '') _message(desc + 'OK');
-      if (handler) handler(res);
+      if (handler && typeof handler == 'function') handler(res);
     }
 
   };
@@ -157,6 +198,82 @@ function BbXmpp(pBaseUrl){
     loader.effect('highlight', {}, 1000).fadeOut(1000, function(o){$(o).remove;});
     return _instance;
   };
+
+  /////////////////////////////////////////////////////////////////////////////////////////
+  //
+  // FORM
+  //
+  /////////////////////////////////////////////////////////////////////////////////////////
+  
+  /**
+   * Create an HTML form from a XMPP data form using an XSL transform
+   * 
+   * @param {Object} data   The form
+   * @param {String} action Name of the callback method
+   * @param {String} status One of 'executing', 'completed' or 'canceled'
+   * @param {Object} params Set of additionnal parameters, hidden fields in the form
+   * @param {String} title  Title if form has no
+   * 
+   * @return {bbXmpp} this
+   */
+  this.formLoad = function formLoad(data, action, status, params, title) {
+    // For use of XSLT processor, see
+    // https://developer.mozilla.org/index.php?title=en/The_XSLT%2F%2FJavaScript_Interface_in_Gecko
+    var baseid = Math.floor(Math.random() * 65000) + 1;
+    var fragment;
+    if (data && data !== '') {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(data, "text/xml");
+      var xsltProcessor = new XSLTProcessor();
+      // Base for form's id : random number between 1 and 65000
+      // Finally import the .xsl
+      xsltProcessor.importStylesheet(gFormStylesheet);
+      xsltProcessor.setParameter(null, "baseid", baseid);
+      fragment = xsltProcessor.transformToFragment(doc, document);
+    } else {
+      fragment = '<form id="form_' + baseid + '"><div class="form_field /></form>';
+    }
+    $('#main_form').empty().append(fragment);
+    // Update input fields name
+    $('#form_' + baseid + ' *[name]').each(function(){var e=$(this);e.attr('name', 'form['+this.name+']'+(e.attr('multiple')?'[]':''));});
+
+    
+    var form = $('#form_' + baseid);
+    // Info
+    if (status == 'completed') {
+      $('#form_' + baseid + ' .form_field').eq(0).before('<p class="form_info ui-state-highlight ui-corner-all">Ok</p>');
+    }
+    if (status == 'canceled') {
+      $('#form_' + baseid + ' .form_field').eq(0).before('<p class="form_info ui-state-error ui-corner-all">Action cancelled</p>');
+    }
+    // Add buttons
+    var buttons = '';
+    buttons += '<div class="form_field form_field_button">';
+    if (status == 'executing') {
+      buttons += '<input type="button" value="Submit" onclick="gXmpp.formSubmit(' + baseid + ')" />';
+    }
+    if (status == 'executing' || status == 'canceled') {
+      buttons += '<input type="button" value="Cancel" onclick="gXmpp.formCancel()" />';
+    }
+    if (status == 'completed') {
+      buttons += '<input type="button" value="Ok" onclick="gXmpp.formCancel(' + baseid + ')" />';
+    }
+    buttons += '</div>';
+    // Set the name of the callback method
+    form.attr('action', action)/* .prepend(buttons) */.append(buttons);
+    // Add title
+// if (title && $('#form_' + baseid + '.form_title').length == 0) {
+// form.prepend('<div class="form_title" xmlns:data="jabber:x:data">' + title +
+// '</div>');
+// }
+    var formTitle = $('#form_' + baseid + ' .form_title').text();
+    $('#main_form').dialog('option', 'title', (formTitle?formTitle:title));
+    if (params) {
+      $.each(params, function(k, v) {form.append('<input type="hidden" name="' + k + '" value="' + v + '" class="form_field form_field_type_hidden" />');});
+    }
+    $('#main_form').dialog('open');
+    return _instance;
+  };
   /**
    * Close the current form
    * 
@@ -183,6 +300,13 @@ function BbXmpp(pBaseUrl){
     // and call it
     _instance[method](data);
   };
+
+  /////////////////////////////////////////////////////////////////////////////////////////
+  //
+  // MISC
+  //
+  /////////////////////////////////////////////////////////////////////////////////////////
+  
   /**
    * Connect
    * 
@@ -197,7 +321,23 @@ function BbXmpp(pBaseUrl){
       _user = aData['form[user]'];
       $('#user_jid').text(_user);
       _auth = $.base64Encode(aData['form[user]'] + ':' +aData['form[password]']);
-      _instance.discoServices();
+      switch (_context) {
+        case 'admin':
+          // get all nodes
+          _instance.discoServices();
+          break;
+        case 'light':
+          // get nodes for pubsub
+          var server;
+          $.get(_baseUrl+"disco/info", {}, function(res){
+            $.each(res.message.message, function(k,v){server=k;});
+            _host = 'pubsub.'+server;
+            _instance.discoServices(_host);
+          }, 'json');
+          break;
+        default:
+          break;
+      }
       _instance.formCancel();
     } else {
       var form = '<x xmlns="jabber:x:data" type="form">' +
@@ -207,7 +347,259 @@ function BbXmpp(pBaseUrl){
       this.formLoad(form, 'connect', 'executing', {}, 'Connect');
     }
   };
+  /**
+   * Init : load tree
+   * 
+   * @return {bbXmpp} this
+   */
+  this.init = function init() {
+    // load stylesheet for forms
+    $.get(_baseUrl+"form.xsl", function(res){gFormStylesheet = res;_instance.connect();}, 'xml');
+    // Load tree
+    // this.discoServices();
+    return _instance;
+  };
 
+  /////////////////////////////////////////////////////////////////////////////////////////
+  //
+  // RENDERING
+  //
+  /////////////////////////////////////////////////////////////////////////////////////////
+  
+  /**
+   * Callback when a tree node is selected : display node details, actions, etc
+   * 
+   * @param aNode
+   * @param aTree
+   * 
+   * @return {bbXmpp} this
+   */
+  this.treeNodeSelected = function treeNodeSelected(aNode, aTree) {
+    var id            = $(aNode).attr('id');
+    var node          = gNodes[id];
+    var content       = '';
+    var identities    = '';
+    var features      = '';
+    var metas         = '';
+    var actions       = [];
+    _instance.current_node = id;
+
+    // Cleanup node tab
+    _instance.nodeDetailClean();
+
+    // identities
+    if (node['identities']) {
+      $.each(node['identities'], function(k, v){
+        var catDsc = '', typeDsc = '';
+        // Add descriptions from the registry
+        if (gRegistars['categories'][v['category']]) {
+          var c = gRegistars['categories'][v['category']];
+          catDsc = ' ( ' + c['desc'] + ' ) ';
+          if (c['type'][v['type']]) typeDsc = ' ( ' + c['type'][v['type']]['desc'] + ' ) ';
+        }
+        var jidnode = (node['jid']?"'"+node['jid']+"'":'null')+','+(node['node']?"'"+node['node']+"'":"''");
+        switch (v['category']) {
+          case 'automation':
+            switch (v['type']) {
+              case 'command-node':
+                actions.push({value: 'Execute', action: "gXmpp.commandExecute({to: '" + node['jid'] + "',node: '" + node['node'] + "'});"});
+                break;
+              case 'command-list':
+                break;
+              case 'rpc':
+                break;
+              case 'soap':
+                break;
+              case 'translation':
+                break;
+              default:
+                break;
+            }
+            break;
+          case 'conference':
+            switch (v['type']) {
+              case 'text':
+                //Don't use : it doesn't work !
+                //actions.push({value: 'Create new room', action: "gXmpp.roomCreate(null);"});
+                //actions.push({value: 'Configure', action: "gXmpp.roomGetConfiguration(null, "+(node['jid']?"'"+node['jid']+ "'":'')+");"});
+                break;
+              default:
+                //@TODO
+                break;
+            }
+            break;
+          case 'directory':
+            switch (v['type']) {
+              case 'user':
+                actions.push({value: 'Search', action: "gXmpp.directorySearch("+(node['jid']?"'"+node['jid']+ "'":'')+");"});
+                break;
+              default:
+                //@TODO
+                break;
+            }
+            break;
+          case 'gateway':
+            break;
+          case 'pubsub':
+            switch (v['type']) {
+              case 'collection':
+                actions.push({value: 'Configure', action: "gXmpp.nodeGetConfiguration(" + jidnode + ");"});
+                actions.push({value: 'New collection', action: "gXmpp.nodeCreate(" + jidnode + ", 'collection');"});
+                actions.push({value: 'New node', action: "gXmpp.nodeCreate(" + jidnode + ", 'leaf');"});
+                actions.push({value: 'Delete', action: "gXmpp.nodeDelete(" + jidnode + ");"});
+                actions.push({value: 'Add affiliation', action: "gXmpp.affiliationEdit(null, '" + node['node'] + "');"});
+                break;
+              case 'leaf':
+              case 'pep':
+                // In fact it may be a collection (ejabberd), so allow sub-node creation.
+                actions.push({value: 'Configure', action: "gXmpp.nodeGetConfiguration(" + jidnode + ");"});
+                actions.push({value: 'New collection', action: "gXmpp.nodeCreate(" + jidnode + ", 'collection');"});
+                actions.push({value: 'New node', action: "gXmpp.nodeCreate(" + jidnode + ", 'leaf');"});
+                actions.push({value: 'Publish content', action: "gXmpp.itemGetForm(" + jidnode + ");"});
+                actions.push({value: 'Delete', action: "gXmpp.nodeDelete(" + jidnode + ");"});
+                actions.push({value: 'Get items', action: "gXmpp.itemGet(" + jidnode + ");"});
+                actions.push({value: 'Purge items', action: "gXmpp.itemDelete(" + jidnode + ");"});
+                actions.push({value: 'Add affiliation', action: "gXmpp.affiliationEdit(null, '" + node['node'] + "');"});
+                break;
+              case 'service':
+                actions.push({value: 'New collection', action: "gXmpp.nodeCreate(" + jidnode + ", 'collection');"});
+                actions.push({value: 'New node', action: "gXmpp.nodeCreate(" + jidnode + ", 'leaf');"});
+                break;
+              default:
+                break;
+            }
+            actions.push({value: 'Subscribe', action: "gXmpp.subscriptionCreate(" + jidnode + ");"});
+            break;
+          case 'server':
+            break;
+          case 'store':
+            break;
+          default:
+            break;
+        }
+        identities = identities.concat(
+            '<dl><dt>Name</dt><dd>',v['name'],
+            '</dd><dt>Category</dt><dd>',v['category'],catDsc,
+            '</dd><dt>Type</dt><dd>',v['type'],typeDsc,'</dd></dl>');
+      });
+    }
+    // Meta datas
+    if (node['meta']) {
+      $.each(node['meta'], function(k, v){
+        var dsc = '';
+        metas = metas.concat('<li>',v,'</li>');
+      });
+    }
+    // Features
+    if (node['features']) {
+      $.each(node['features'], function(k, v){
+        var dsc = '';
+        // Add descriptions from the registry
+        if (gRegistars['features'][v]) dsc = ' ( ' + gRegistars['features'][v]['desc'] + ' ' + gRegistars['features'][v]['doc'] + ' ) ';
+        features = features.concat('<li>',v,dsc,'</li>');
+      });
+    }
+    // Render
+    var name = (node['name'] ? node['name'] : (node['node']?node['node']:id));
+    $('#tabs-main h2').eq(0).text(name);
+    content = content.concat(
+        '<h2>',name,'</h2>\n',
+        '<dl><dt>Jid</dt><dd>',node['jid'],
+        '</dd><dt>Name</dt><dd>',node['name'],
+        '</dd><dt>Node</dt><dd>',node['node'],'</dd></dl>');
+    content += '<h3>Identities</h3>\n' + identities;
+    if (metas !== '') content += '<h3>Meta datas</h3>\n<ul>' + metas + '</ul>';
+    if (features !== '') content += '<h3>Features</h3>\n<ul>' + features + '</ul>';
+    if (actions.length > 0) {
+      var render = '';
+      $.each(actions, function(k, v){
+        render = render.concat('<input type="button" value="',v['value'],'" onclick="',v['action'],'" />');
+      });
+      $('#node_actions').empty().append('<form><fieldset>' + render + '</fieldset></form>\n');
+      content = content.concat('<h3>Actions</h3>\n<form><fieldset>',render,'</fieldset></form>\n');
+    }
+    $('#main_node').empty().append(content);
+    $('#main_node h3').click(function(){$(this).next().toggle();});
+    
+    return _instance;
+  };
+  /**
+   * Render the node list in 'light' mode
+   */
+  this.renderNodeList = function renderNodeList() {
+    $('#nodes_list tbody').empty();
+    $.each(gNodes, function(k,node){
+      if (node.node){
+        var sub = '';
+        var act = '';
+        var jidnode = "'"+_host+"','"+node['node']+"'";
+        if (_subsByNode[node['node']]) {
+          sub += '<input type="button" value="Me désabonner" onclick="gXmpp.subscriptionDelete('+jidnode+',\''+_subsByNode[node['node']]['subid']+'\',\''+_subsByNode[node['node']]['jid']+'\');" />';
+          act += '<p><a class="array_action" title="Ajouter" onclick="gXmpp.handlerCreate(\''+node.node+'\');">Ajouter</a></p>';
+          if (_handlers[node['node']]) {
+            act += '<ul>';
+            $.each(_handlers[node['node']], function(k2,handler){
+              act += '<li>';
+              act += '<a class="array_action" title="Editer" onclick="gXmpp.handlerEdit('+handler.id+',\''+handler['class']+'\',\''+node.node+'\');"><span class="ui-icon ui-icon-pencil" /></a>';
+              act += '<a class="array_action" title="Supprimer" onclick="gXmpp.handlerDelete('+handler.id+');"><span class="ui-icon ui-icon-trash" /></a>';
+              act += handler['class'];
+              act += '</li>';
+            });
+            act += '</ul>';
+          }
+        } else {
+          sub += '<input type="button" value="M\'abonner" onclick="gXmpp.subscriptionCreate('+jidnode+');" />';
+        }
+        $('#nodes_list tbody').append('<tr id="node_row_'+node.node+'"><td>'+node.node+' - '+node.name+'</td><td>'+sub+'</td></td><td>'+act+'</td></tr>');
+      }
+    });
+  };
+  /**
+   * Display subscriptions
+   * @param {Array}  aSubs list of subscription
+   * @param {String} aMode 'node' or 'user'
+   * 
+   * @return {bbXmpp} this
+   */
+  this.renderSubscriptionList = function renderSubscriptionList(aSubs, aMode) {
+    var table = (aMode == 'user' ? $('#subscriptions tbody') : $('#node_subscriptions tbody'));
+    if (_context == 'admin') {
+      var editOptions = (gNodes[_host]['features']['http://jabber.org/protocol/pubsub#subscription-options'] ? true : false);
+      // create a subscription row
+      var createArray = function createArray(v) {
+        if (!v['node']) v['node'] = '';
+        if (!v['subid']) v['subid'] = '';
+        var nodeParams    = "null, '" + v['node'] + "', '" + v['subid'] + "'";
+        var nodeParamsjid = nodeParams + ", '" + v['jid'] + "'";
+        var res  = '';
+        res += '<td>'+v['jid']+'</td><td>'+v['node']+'</td><td>'+v['subid']+'</td><td>'+v['subscription']+'</td>';
+        res += '<td>';
+        res += '<a class="array_action" title="Get items" onclick="gXmpp.itemGet('+nodeParams +');"><span class="ui-icon ui-icon-search" /></a>';
+        if (editOptions) {
+          res += '<a class="array_action" title="Edit options" onclick="gXmpp.subscriptionOptions('+nodeParamsjid+');"><span class="ui-icon ui-icon-pencil" /></a>';
+        }
+        res += '<a class="array_action" title="Edit subscription" onclick="gXmpp.subscriptionEdit('+nodeParamsjid+",'"+v['subscription']+"'"+');"><span class="ui-icon ui-icon-pencil" /></a>';
+        res += '<a class="array_action" title="Delete subscription" onclick="gXmpp.subscriptionDelete('+nodeParamsjid+');"><span class="ui-icon ui-icon-trash" /></a>';
+        res += '</td>';
+        return '<tr>' + res + '</tr>';
+      };
+      table.empty();
+      var tmp = '';
+      $.each(aSubs, function(k, v){tmp += createArray(v);});
+      if (tmp !== '') table.append(tmp);
+      // select tab
+      $('#tabs').tabs('select', (aMode == 'user' ? 'tabs-subs' : 'tabs-node'));
+    } else {
+      _instance.renderNodeList();
+    }
+    return _instance;
+  };
+  /////////////////////////////////////////////////////////////////////////////////////////
+  //
+  // AJAX
+  //
+  /////////////////////////////////////////////////////////////////////////////////////////
+  
   /**
    * Callback method on discovery successful
    * 
@@ -286,6 +678,7 @@ function BbXmpp(pBaseUrl){
   this.discoServicesSuccess = function discoServicesSuccess(aRes) {
     var res = aRes.message;
     var tmp = {};
+    // Convert the result
     function toTree(key, val){
       var res = {
         attributes: { id : key}, 
@@ -303,8 +696,21 @@ function BbXmpp(pBaseUrl){
       });
       _host = host;
     });
-    $('#main_tree').empty();
-    $.each(tmp, function(k, v){$('#main_tree').append(gTree.create(toTree(k, v), -1));});
+    if (_context == 'admin') $('#main_tree').empty();
+    $.each(tmp, function(k, v){
+      var treeSrc = toTree(k, v);
+      if (_context == 'admin') {
+        // append result to tree
+        $('#main_tree').append(gTree.create(treeSrc, -1));
+      }
+    });
+    // "light" mode : create node list
+    if (_context == 'light') {
+      // Get all subscriptions
+      _instance.subscriptionGet();
+      // Get all handlers
+      _instance.handlerGetAll();
+    }
   };
   /**
    * Perform a request to discover the whole tree
@@ -331,76 +737,6 @@ function BbXmpp(pBaseUrl){
     });
     return _instance;
   };
-  /**
-   * Create an HTML form from a XMPP data form using an XSL transform
-   * 
-   * @param {Object} data   The form
-   * @param {String} action Name of the callback method
-   * @param {String} status One of 'executing', 'completed' or 'canceled'
-   * @param {Object} params Set of additionnal parameters, hidden fields in the form
-   * @param {String} title  Title if form has no
-   * 
-   * @return {bbXmpp} this
-   */
-  this.formLoad = function formLoad(data, action, status, params, title) {
-    // For use of XSLT processor, see
-    // https://developer.mozilla.org/index.php?title=en/The_XSLT%2F%2FJavaScript_Interface_in_Gecko
-    var baseid = Math.floor(Math.random() * 65000) + 1;
-    var fragment;
-    if (data && data !== '') {
-      var parser = new DOMParser();
-      var doc = parser.parseFromString(data, "text/xml");
-      var xsltProcessor = new XSLTProcessor();
-      // Base for form's id : random number between 1 and 65000
-      // Finally import the .xsl
-      xsltProcessor.importStylesheet(gFormStylesheet);
-      xsltProcessor.setParameter(null, "baseid", baseid);
-      fragment = xsltProcessor.transformToFragment(doc, document);
-    } else {
-      fragment = '<form id="form_' + baseid + '"><div class="form_field /></form>';
-    }
-    $('#main_form').empty().append(fragment);
-    // Update input fields name
-    $('#form_' + baseid + ' *[name]').each(function(){var e=$(this);e.attr('name', 'form['+this.name+']'+(e.attr('multiple')?'[]':''));});
-
-    
-    var form = $('#form_' + baseid);
-    // Info
-    if (status == 'completed') {
-      $('#form_' + baseid + ' .form_field').eq(0).before('<p class="form_info ui-state-highlight ui-corner-all">Ok</p>');
-    }
-    if (status == 'canceled') {
-      $('#form_' + baseid + ' .form_field').eq(0).before('<p class="form_info ui-state-error ui-corner-all">Action cancelled</p>');
-    }
-    // Add buttons
-    var buttons = '';
-    buttons += '<div class="form_field form_field_button">';
-    if (status == 'executing') {
-      buttons += '<input type="button" value="Submit" onclick="gXmpp.formSubmit(' + baseid + ')" />';
-    }
-    if (status == 'executing' || status == 'canceled') {
-      buttons += '<input type="button" value="Cancel" onclick="gXmpp.formCancel()" />';
-    }
-    if (status == 'completed') {
-      buttons += '<input type="button" value="Ok" onclick="gXmpp.formCancel(' + baseid + ')" />';
-    }
-    buttons += '</div>';
-    // Set the name of the callback method
-    form.attr('action', action)/* .prepend(buttons) */.append(buttons);
-    // Add title
-// if (title && $('#form_' + baseid + '.form_title').length == 0) {
-// form.prepend('<div class="form_title" xmlns:data="jabber:x:data">' + title +
-// '</div>');
-// }
-    var formTitle = $('#form_' + baseid + ' .form_title').text();
-    $('#main_form').dialog('option', 'title', (formTitle?formTitle:title));
-    if (params) {
-      $.each(params, function(k, v) {if (v) {form.append('<input type="hidden" name="' + k + '" value="' + v + '" class="form_field form_field_type_hidden" />');}});
-    }
-    $('#main_form').dialog('open');
-    return _instance;
-  };
-
   /**
    * Load the node creation form
    * 
@@ -439,15 +775,17 @@ function BbXmpp(pBaseUrl){
             _instance.discoInfo(aData['server'], newNodePath);
             // close the dialog
             $('#main_form').empty().dialog('close');
-            // update the tree
-            var selected = gTree.selected;
-            var newNode = {
-              attributes: { id : selected.attr('id') + (/!/.test(selected.attr('id'))?'':'!') + '/' + newNodeName}, 
-              data: newNodeName,
-              children: []
-            };
-            gTree.create(newNode, selected);
-            gTree.refresh(selected);
+            if (_context == 'admin') {
+              // update the tree
+              var selected = gTree.selected;
+              var newNode = {
+                attributes: { id : selected.attr('id') + (/!/.test(selected.attr('id'))?'':'!') + '/' + newNodeName}, 
+                data: newNodeName,
+                children: []
+              };
+              gTree.create(newNode, selected);
+              gTree.refresh(selected);
+            }
           }
           _handleResponse(res, null, 'Node ' + data['node'] + ' creation');
         },
@@ -512,7 +850,6 @@ function BbXmpp(pBaseUrl){
       });
     return _instance;
   };
-
  /**
    * Set the configuration of a node
    * 
@@ -544,7 +881,7 @@ function BbXmpp(pBaseUrl){
    * 
    * @return {bbXmpp} this
    */
-  this.affiliationsGet = function affiliationsGet(aNode) {
+  this.affiliationGet = function affiliationGet(aNode) {
     var data = {};
     var onSuccess;
     var createArray = function(v) {
@@ -555,7 +892,7 @@ function BbXmpp(pBaseUrl){
       res += '<td>';
       res += '<a class="array_action" title="Edit node" onclick="gXmpp.nodeGetConfiguration(' + nodeParams +');"><span class="ui-icon ui-icon-pencil" /></a>';
       res += '<a class="array_action" title="Edit affiliation" onclick="gXmpp.affiliationEdit(null, \'' + v['node'] + "', '" + v['jid'] + "', '" + v['affiliation']+'\');"><span class="ui-icon ui-icon-pencil" /></a>';
-      res += '<a class="array_action" title="Delete node" onclick="gXmpp.nodeDelete('+nodeParams+');gXmpp.affiliationsGet('+(aNode?"'"+aNode+"'":'')+')"><span class="ui-icon ui-icon-trash" /></a>';
+      res += '<a class="array_action" title="Delete node" onclick="gXmpp.nodeDelete('+nodeParams+');gXmpp.affiliationGet('+(aNode?"'"+aNode+"'":'')+')"><span class="ui-icon ui-icon-trash" /></a>';
       res += '</td>';
       return '<tr>' + res + '</tr>';
     };
@@ -575,7 +912,7 @@ function BbXmpp(pBaseUrl){
         } else {
           $('#node_affiliations tbody').empty();
         }
-        $('#tabs').tabs('select', 'tabs-node');
+        if (_context == 'admin') $('#tabs').tabs('select', 'tabs-node');
       };
     } else {
       onSuccess = function(res){
@@ -586,7 +923,7 @@ function BbXmpp(pBaseUrl){
         } else {
           $('#affiliations tbody').empty();
         }
-        $('#tabs').tabs('select', 'tabs-subs');
+        if (_context == 'admin') $('#tabs').tabs('select', 'tabs-subs');
       };
     }
     var loader = _createLoader('Retrieving affiliations...');
@@ -665,7 +1002,6 @@ function BbXmpp(pBaseUrl){
     $('#node_items').empty();
     return _instance;
   };
-
   /**
    * Get subscriptions
    * 
@@ -675,26 +1011,10 @@ function BbXmpp(pBaseUrl){
    * 
    * @return {bbXmpp} this
    */
-  this.subscriptionsGet = function subscriptionsGet(aNode) {
+  this.subscriptionGet = function subscriptionGet(aNode) {
     var data = {};
     var onSuccess;
-    var editOptions = (gNodes[_host]['features']['http://jabber.org/protocol/pubsub#subscription-options'] ? true : false);
-    var createArray = function(v) {
-      if (!v['node']) v['node'] = '';
-      if (!v['subid']) v['subid'] = '';
-      var nodeParams    = "null, '" + v['node'] + "', '" + v['subid'] + "'";
-      var nodeParamsjid = nodeParams + ", '" + v['jid'] + "'";
-      var res  = '';
-      res += '<td>'+v['jid']+'</td><td>'+v['node']+'</td><td>'+v['subid']+'</td><td>'+v['subscription']+'</td>';
-      res += '<td>';
-      res += '<a class="array_action" title="Get items" onclick="gXmpp.itemGet('+nodeParams +');"><span class="ui-icon ui-icon-search" /></a>';
-      if (editOptions) {
-        res += '<a class="array_action" title="Edit subscription" onclick="gXmpp.subscriptionEdit(' + nodeParamsjid +');"><span class="ui-icon ui-icon-pencil" /></a>';
-      }
-      res += '<a class="array_action" title="Delete subscription" onclick="gXmpp.subscriptionDelete('+nodeParamsjid +');"><span class="ui-icon ui-icon-trash" /></a>';
-      res += '</td>';
-      return '<tr>' + res + '</tr>';
-    };
+    var mode = (aNode ? 'node' : 'user');
     if (aNode) {
       var tmp = aNode.split('!');
       if (tmp.length == 1) {
@@ -703,27 +1023,6 @@ function BbXmpp(pBaseUrl){
         data['server'] = tmp.shift();
         data['node'] = tmp.join('!');
       }
-      onSuccess = function(res){
-        var tmp ='';
-        $.each(res.message.message, function(k, v){tmp += createArray(v);});
-        if (tmp !== '') {
-          $('#node_subscriptions tbody').empty().append($(tmp));
-        } else {
-          $('#node_subscriptions tbody').empty();
-        }
-        $('#tabs').tabs('select', 'tabs-node');
-      };
-    } else {
-      onSuccess = function(res){
-        var tmp ='';
-        $.each(res.message.message, function(k, v){tmp += createArray(v);});
-        if (tmp !== '') {
-          $('#subscriptions tbody').empty().append($(tmp));
-        } else {
-          $('#subscriptions tbody').empty();
-        }
-        $('#tabs').tabs('select', 'tabs-subs');
-      };
     }
     var loader = _createLoader('Retrieving subscriptions...');
     $.ajax({
@@ -732,7 +1031,13 @@ function BbXmpp(pBaseUrl){
         data: data,
         dataType: 'json',
         beforeSend: _beforeSend,
-        success: function(res){_handleResponse(res, onSuccess);},
+        success: function(res){_handleResponse(res, function(){
+           $.each(res.message.message, function(k,v){
+             _subsByUser[v['jid']] = v;
+             _subsByNode[v['node']] = v;
+           });
+          _instance.renderSubscriptionList(res.message.message, mode);
+        });},
         error: _ajaxErrorCallback,
         complete: function(){_deleteLoader(loader);}
     });
@@ -741,14 +1046,17 @@ function BbXmpp(pBaseUrl){
   /**
    * Subscribe to a node
    * 
-   * @param {String} aServer Server
-   * @param {String} aNode   Node
+   * @param {String} aServer  Server
+   * @param {String} aNode    Node
+   * @param {String} aOptions Initial options
    * 
    * @return {bbXmpp} this
    */
-  this.subscriptionCreate = function subscriptionCreate(aServer, aNode) {
+  this.subscriptionCreate = function subscriptionCreate(aServer, aNode, aOptions) {
     var loader = _createLoader('Subscribing to ' + aNode);
     var data = {server: aServer, node: aNode};
+    var options = (aOptions ? aOptions : _defaultSubscriptionOption);
+    $.each(options, function(k, v){if (typeof(v) == 'object')data['options['+k+'][]']=v; else data['options['+k+']']=v;});
     $.ajax({
         type: "POST",
         url: _baseUrl+"pubsub/subscription",
@@ -760,10 +1068,12 @@ function BbXmpp(pBaseUrl){
             // close the dialog
             $('#main_form').empty().dialog('close');
             _message("Subscription to node " + aNode + " : " + res.message.message.subscription);
-            // Retrieve options
-            _instance.subscriptionEdit(aServer, aNode, res.message.message.subid, res.message.message.jid);
-            // Update display of user's subscriptions
-            _instance.subscriptionsGet();
+            if (_context == 'admin') {
+              // Retrieve options
+              _instance.subscriptionOptions(aServer, aNode, res.message.message.subid, res.message.message.jid);
+              // Update display of user's subscriptions
+            }
+            _instance.subscriptionGet();
           });
         },
         error: _ajaxErrorCallback,
@@ -781,14 +1091,14 @@ function BbXmpp(pBaseUrl){
    * 
    * @return {bbXmpp} this
    */
-  this.subscriptionEdit = function subscriptionEdit(aServer, aNode, aSubid, aJid) {
-    if (gNodes[_host]['features']['http://jabber.org/protocol/pubsub#subscription-options']) {
+  this.subscriptionOptions = function subscriptionOptions(aServer, aNode, aSubid, aJid) {
+//    if (gNodes[_host]['features']['http://jabber.org/protocol/pubsub#subscription-options']) {
       var loader = _createLoader('Retrieving options...');
       var data = {server: aServer, node: aNode, jid: aJid};
       if (aSubid && aSubid !== '') data['subid'] = aSubid;
       $.ajax({
-          type: "OPTIONS",
-          url: _baseUrl+"pubsub/subscription",
+          type: "GET",
+          url: _baseUrl+"pubsub/options",
           data: data,
           dataType: 'json',
           beforeSend: _beforeSend,
@@ -801,9 +1111,9 @@ function BbXmpp(pBaseUrl){
           error: _ajaxErrorCallback,
           complete: function(){_deleteLoader(loader);}
         });
-    } else {
-      _message("Server don't support configuration of subscription");
-    }
+//    } else {
+//      _message("Server don't support configuration of subscription");
+//    }
     return _instance;
   };
   /**
@@ -813,7 +1123,51 @@ function BbXmpp(pBaseUrl){
    * 
    * @return {bbXmpp} this
    */
-  this.subscriptionSetConfiguration = function subscriptionSetConfiguration(data) {
+  this.subscriptionSetConfiguration = function subscriptionSetConfiguration(aData) {
+    $.ajax({
+      type: "PUT",
+      url: _baseUrl+"pubsub/options",
+      data: aData,
+      dataType: 'json',
+      beforeSend: _beforeSend,
+      success: function(res){
+        _handleResponse(res, function(res){$('#main_form').empty().dialog('close');}, 'Subscription updated');
+      },
+      error: _ajaxErrorCallback
+    });
+    return _instance;
+  };
+  /**
+   * Display the form for editing a subscrition
+   * @param {String} aServer
+   * @param {String} aNode
+   * @param {String} aSubid
+   * @param {String} aJid
+   * @param {String} aSubscription current subscription
+   * @return
+   */
+  this.subscriptionEdit = function subscriptionEdit(aServer, aNode, aSubid, aJid, aSubscription) {
+    var form = '<x xmlns="jabber:x:data" type="form">' +
+      '<field label="Subscription" type="list-single" var="subscription">' +
+      '<option label="Subscribed"><value>subscribed</value></option>' +
+      '<option label="Pending"><value>pending</value></option>' +
+      '<option label="None"><value>none</value></option>' +
+      '<option label="Unconfigured"><value>unconfigured</value></option>' +
+      '<value>' + aSubscription +'</value></field>' +
+      '</x>';
+    return this.formLoad(form, 'subscriptionSet', 'executing', {server: aServer, node: aNode, subid: aSubid, jid: aJid}, 'Edit of ' + aJid + ' to ' + aNode);
+  };
+  /**
+   * Set the options of a subscription
+   * 
+   * @param {Object} aData data from a form
+   * 
+   * @return {bbXmpp} this
+   */
+  this.subscriptionSet = function subscriptionSet(aData) {
+    var loader = _createLoader('Updating subscription to ' + aData['node']);
+    var data = {server: aData['server'], node: aData['node'], jid: aData['jid'], subscription: aData['form[subscription]']};
+    if (aData['subid'] !== '') data['subid'] = aData['subid'];
     $.ajax({
       type: "PUT",
       url: _baseUrl+"pubsub/subscription",
@@ -823,7 +1177,8 @@ function BbXmpp(pBaseUrl){
       success: function(res){
         _handleResponse(res, function(res){$('#main_form').empty().dialog('close');}, 'Subscription updated');
       },
-      error: _ajaxErrorCallback
+      error: _ajaxErrorCallback,
+      complete: function(){_deleteLoader(loader);}
     });
     return _instance;
   };
@@ -849,7 +1204,12 @@ function BbXmpp(pBaseUrl){
         beforeSend: _beforeSend,
         success: function(res){
           //@TODO : refresh
-          _handleResponse(res, null, 'Subscription deletion');
+          _handleResponse(res, function(){
+            if (_context == 'light') {
+              delete _subsByNode[aNode];
+              _instance.renderNodeList();
+            }
+          }, 'Subscription deletion');
         },
         error: _ajaxErrorCallback,
         complete: function(){_deleteLoader(loader);}
@@ -929,7 +1289,7 @@ function BbXmpp(pBaseUrl){
               res += '<p><a title="Delete item" onclick="gXmpp.itemDelete('+params+');"><span class="ui-icon ui-icon-trash" /></a></p>';
               node_items.append($('<pre></pre>').text(content.replace(/></g, '>\n<')).wrap('<div class="node_item"></div>').parent().prepend(res));
             });
-            $('#tabs').tabs('select', 'tabs-node');
+            if (_context == 'admin') $('#tabs').tabs('select', 'tabs-node');
           });
         },
         error: _ajaxErrorCallback,
@@ -1188,175 +1548,156 @@ function BbXmpp(pBaseUrl){
       });
     return _instance;
   };
-
   /**
-   * Init : load tree
+   * Get all handlers of the current user
    * 
    * @return {bbXmpp} this
    */
-  this.init = function init() {
-    // load stylesheet for forms
-    $.get(_baseUrl+"form.xsl", function(res){gFormStylesheet = res;_instance.connect();}, 'xml');
-    // Load tree
-//    this.discoServices();
+  this.handlerGetAll = function handlerGetAll() {
+    var loader = _createLoader('Retrieving actions...');
+    var data = {};
+    $.ajax({
+        type: "GET",
+        url: _baseUrl+"hub/handler",
+        data: data,
+        dataType: 'json',
+        beforeSend: _beforeSend,
+        success: function(res){
+          _handleResponse(res, function(res2){
+            $.each(res.message.message, function(k,v){if (!_handlers[v.node])_handlers[v.node]=[];_handlers[v.node].push(v);});
+            _instance.renderNodeList();
+          });
+        },
+        error: _ajaxErrorCallback,
+        complete: function(){_deleteLoader(loader);}
+      });
     return _instance;
   };
-  
   /**
-   * Callback when a tree node is selected : display node details, actions, etc
+   * Request the handler creation form
    * 
-   * @param aNode
-   * @param aTree
+   * @param {String} aNode   Node
    * 
    * @return {bbXmpp} this
    */
-  this.treeNodeSelected = function treeNodeSelected(aNode, aTree) {
-    var id            = $(aNode).attr('id');
-    var node          = gNodes[id];
-    var content       = '';
-    var identities    = '';
-    var features      = '';
-    var metas         = '';
-    var actions       = [];
-    _instance.current_node = id;
-
-    // Cleanup node tab
-    _instance.nodeDetailClean();
-
-    // identities
-    if (node['identities']) {
-      $.each(node['identities'], function(k, v){
-        var catDsc = '', typeDsc = '';
-        // Add descriptions from the registry
-        if (gRegistars['categories'][v['category']]) {
-          var c = gRegistars['categories'][v['category']];
-          catDsc = ' ( ' + c['desc'] + ' ) ';
-          if (c['type'][v['type']]) typeDsc = ' ( ' + c['type'][v['type']]['desc'] + ' ) ';
-        }
-        var jidnode = (node['jid']?"'"+node['jid']+"'":'null')+','+(node['node']?"'"+node['node']+"'":"''");
-        switch (v['category']) {
-          case 'automation':
-            switch (v['type']) {
-              case 'command-node':
-                actions.push({value: 'Execute', action: "gXmpp.commandExecute({to: '" + node['jid'] + "',node: '" + node['node'] + "'});"});
-                break;
-              case 'command-list':
-                break;
-              case 'rpc':
-                break;
-              case 'soap':
-                break;
-              case 'translation':
-                break;
-              default:
-                break;
-            }
-            break;
-          case 'conference':
-            switch (v['type']) {
-              case 'text':
-                //Don't use : it doesn't work !
-                //actions.push({value: 'Create new room', action: "gXmpp.roomCreate(null);"});
-                //actions.push({value: 'Configure', action: "gXmpp.roomGetConfiguration(null, "+(node['jid']?"'"+node['jid']+ "'":'')+");"});
-                break;
-              default:
-                //@TODO
-                break;
-            }
-            break;
-          case 'directory':
-            switch (v['type']) {
-              case 'user':
-                actions.push({value: 'Search', action: "gXmpp.directorySearch("+(node['jid']?"'"+node['jid']+ "'":'')+");"});
-                break;
-              default:
-                //@TODO
-                break;
-            }
-            break;
-          case 'gateway':
-            break;
-          case 'pubsub':
-            switch (v['type']) {
-              case 'collection':
-                actions.push({value: 'Configure', action: "gXmpp.nodeGetConfiguration(" + jidnode + ");"});
-                actions.push({value: 'New collection', action: "gXmpp.nodeCreate(" + jidnode + ", 'collection');"});
-                actions.push({value: 'New node', action: "gXmpp.nodeCreate(" + jidnode + ", 'leaf');"});
-                actions.push({value: 'Delete', action: "gXmpp.nodeDelete(" + jidnode + ");"});
-                actions.push({value: 'Add affiliation', action: "gXmpp.affiliationEdit(null, '" + node['node'] + "');"});
-                break;
-              case 'leaf':
-              case 'pep':
-                // In fact it may be a collection (ejabberd), so allow sub-node creation.
-                actions.push({value: 'Configure', action: "gXmpp.nodeGetConfiguration(" + jidnode + ");"});
-                actions.push({value: 'New collection', action: "gXmpp.nodeCreate(" + jidnode + ", 'collection');"});
-                actions.push({value: 'New node', action: "gXmpp.nodeCreate(" + jidnode + ", 'leaf');"});
-                actions.push({value: 'Publish content', action: "gXmpp.itemGetForm(" + jidnode + ");"});
-                actions.push({value: 'Delete', action: "gXmpp.nodeDelete(" + jidnode + ");"});
-                actions.push({value: 'Get items', action: "gXmpp.itemGet(" + jidnode + ");"});
-                actions.push({value: 'Purge items', action: "gXmpp.itemDelete(" + jidnode + ");"});
-                actions.push({value: 'Add affiliation', action: "gXmpp.affiliationEdit(null, '" + node['node'] + "');"});
-                break;
-              case 'service':
-                actions.push({value: 'New collection', action: "gXmpp.nodeCreate(" + jidnode + ", 'collection');"});
-                actions.push({value: 'New node', action: "gXmpp.nodeCreate(" + jidnode + ", 'leaf');"});
-                break;
-              default:
-                break;
-            }
-            actions.push({value: 'Subscribe', action: "gXmpp.subscriptionCreate(" + jidnode + ");"});
-            break;
-          case 'server':
-            break;
-          case 'store':
-            break;
-          default:
-            break;
-        }
-        identities = identities.concat(
-            '<dl><dt>Name</dt><dd>',v['name'],
-            '</dd><dt>Category</dt><dd>',v['category'],catDsc,
-            '</dd><dt>Type</dt><dd>',v['type'],typeDsc,'</dd></dl>');
-      });
-    }
-    // Meta datas
-    if (node['meta']) {
-      $.each(node['meta'], function(k, v){
-        var dsc = '';
-        metas = metas.concat('<li>',v,'</li>');
-      });
-    }
-    // Features
-    if (node['features']) {
-      $.each(node['features'], function(k, v){
-        var dsc = '';
-        // Add descriptions from the registry
-        if (gRegistars['features'][v]) dsc = ' ( ' + gRegistars['features'][v]['desc'] + ' ' + gRegistars['features'][v]['doc'] + ' ) ';
-        features = features.concat('<li>',v,dsc,'</li>');
-      });
-    }
-    // Render
-    var name = (node['name'] ? node['name'] : (node['node']?node['node']:id));
-    $('#tabs-main h2').eq(0).text(name);
-    content = content.concat(
-        '<h2>',name,'</h2>\n',
-        '<dl><dt>Jid</dt><dd>',node['jid'],
-        '</dd><dt>Name</dt><dd>',node['name'],
-        '</dd><dt>Node</dt><dd>',node['node'],'</dd></dl>');
-    content += '<h3>Identities</h3>\n' + identities;
-    if (metas !== '') content += '<h3>Meta datas</h3>\n<ul>' + metas + '</ul>';
-    if (features !== '') content += '<h3>Features</h3>\n<ul>' + features + '</ul>';
-    if (actions.length > 0) {
-      var render = '';
-      $.each(actions, function(k, v){
-        render = render.concat('<input type="button" value="',v['value'],'" onclick="',v['action'],'" />');
-      });
-      $('#node_actions').empty().append('<form><fieldset>' + render + '</fieldset></form>\n');
-      content = content.concat('<h3>Actions</h3>\n<form><fieldset>',render,'</fieldset></form>\n');
-    }
-    $('#main_node').empty().append(content);
-    $('#main_node h3').click(function(){$(this).next().toggle();});
-    
+  this.handlerCreate = function handlerCreate(node) {
+    var loader = _createLoader('Retrieving list of available actions...');
+    data = {};
+    $.ajax({
+      type: "GET",
+      url: _baseUrl+'hub/class',
+      data: data,
+      dataType: 'json',
+      beforeSend: _beforeSend,
+      success: function(res){
+        _handleResponse(res, function(res2){
+          var form = '<x xmlns="jabber:x:data" type="form">' +
+          '<field label="Type" type="list-single" var="class">';
+          $.each(res.message.message, function(k, v){
+            form += '<option label="'+v+'"><value>'+v+'</value></option>'; 
+          });
+          form += '</field></x>';
+          _instance.formLoad(form, 'handlerCreate2', 'executing', {node: node}, 'Create handler');
+        });
+      },
+      error: _ajaxErrorCallback,
+      complete: function(){_deleteLoader(loader);}
+    });
+    return _instance;
+  };
+  /**
+   * Handler creation, second step
+   * 
+   * @param {Object} aData data from a form
+   * 
+   * @return {bbXmpp} this
+   */
+  this.handlerCreate2 = function handlerCreate2(aData) {
+    if (aData['form[class]'] !== '') _instance.handlerEdit(null, aData['form[class]'], aData['node']);
+    return _instance;
+  };
+  /**
+   * Save an event handler
+   * 
+   * @param {Object} aData data from a form
+   * 
+   * @return {bbXmpp} this
+   */
+  this.handlerSave = function handlerSave(aData) {
+    var loader = _createLoader('Saving action...');
+    var data = aData;
+    $.ajax({
+      type: aData['id']?"PUT":"POST",
+      url: _baseUrl+'hub/handler',
+      data: data,
+      dataType: 'json',
+      beforeSend: _beforeSend,
+      success: function(res){
+      _handleResponse(res, function(res2){
+        $('#main_form').empty().dialog('close');
+        _instance.renderNodeList();
+      },aData['id']?'Action updated':'Action created');
+    },
+      error: _ajaxErrorCallback,
+      complete: function(){_deleteLoader(loader);}
+    });
+    return _instance;
+  };
+  /**
+   * Display the handler edit form
+   * 
+   * @param {String} aId    Handler id
+   * @param {String} aClass Handler class
+   * @param {String} aNode  Node
+   * 
+   * @return {bbXmpp} this
+   */
+  this.handlerEdit = function handlerEdit(aId, aClass, aNode) {
+    var loader = _createLoader('Retrieving action...');
+    data = {};
+    if (aId) data['id'] = aId;
+    if (aClass) data['class'] = aClass;
+    $.ajax({
+      type: "GET",
+      url: _baseUrl+'hub/form',
+      data: data,
+      dataType: 'json',
+      beforeSend: _beforeSend,
+      success: function(res){
+        _handleResponse(res, function(res2){
+          _instance.formLoad(res.message.message, 'handlerSave', 'executing', {id: aId, 'class': aClass, node: aNode}, 'Edit action');
+        });
+      },
+      error: _ajaxErrorCallback,
+      complete: function(){_deleteLoader(loader);}
+    });
+    return _instance;
+  };
+  /**
+   * Delete a handler
+   * 
+   * @param {String} aId Handler id
+   * 
+   * @return {bbXmpp} this
+   */
+  this.handlerDelete = function handlerDelete(aId) {
+    var loader = _createLoader('Deleting action...');
+    data = {id: aId};
+    $.ajax({
+      type: "DELETE",
+      url: _baseUrl+'hub/handler',
+      data: data,
+      dataType: 'json',
+      beforeSend: _beforeSend,
+      success: function(res){
+        _handleResponse(res, function(res2){
+          $.each(_handlers, function(k,v){if (v.id==aId) delete _handlers[k];});
+          _instance.renderNodeList();
+        });
+      },
+      error: _ajaxErrorCallback,
+      complete: function(){_deleteLoader(loader);}
+    });
     return _instance;
   };
 }

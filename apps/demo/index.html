@@ -6,13 +6,13 @@
 <link rel="stylesheet" type="text/css" href="js/tree/tree_component.css" />
 <link rel="stylesheet" type="text/css" href="css/form.css" />
 <link rel="stylesheet" type="text/css" href="css/layout.css" />
+<link rel="stylesheet" type="text/css" href="css/layout-admin.css" />
 <title>Test</title>
 </head>
 <body>
 	<div id="header">
         <a class="botton" onclick="gXmpp.connect('');" href="#">Connect</a>
-        <a class="botton" onclick="gXmpp.nodeGetConfiguration('/root');" href="#">Get Node default configuration</a>
-        Connecté avec le compte <span id='user_jid'></span>
+        JID : <span id='user_jid'></span>
 	</div>
 	<div id="body">
 		<div id="col_left" class="ui-widget ui-widget-content">
@@ -47,7 +47,7 @@
                 <div id="tabs-node">
                   <h2></h2>
                   <div>
-                    <a class="botton" onclick="gXmpp.affiliationsGet(gXmpp.current_node);gXmpp.subscriptionsGet(gXmpp.current_node);" href="#"><span class="ui-icon ui-icon-refresh" ></span></a>
+                    <a class="botton" onclick="gXmpp.affiliationGet(gXmpp.current_node);gXmpp.subscriptionGet(gXmpp.current_node);" href="#"><span class="ui-icon ui-icon-refresh" ></span></a>
                   </div>
                     <h3>Actions</h3>
                     <div id="node_actions"></div>
@@ -93,7 +93,7 @@
                 </div>
                 <div id="tabs-subs">
                   <div>
-                    <a class="botton" onclick="gXmpp.affiliationsGet();gXmpp.subscriptionsGet();" href="#"><span class="ui-icon ui-icon-refresh"></span>Refresh</a>
+                    <a class="botton" onclick="gXmpp.affiliationGet();gXmpp.subscriptionGet();" href="#"><span class="ui-icon ui-icon-refresh"></span></a>
                   </div>
                   <h2>You</h2>
                   <h3>Your subscriptions</h3>
@@ -162,7 +162,7 @@ Clochix 2009 Cf <a href="https://labo.clochix.net/projects/show/sixties">Sixties
 	$(document).ready(function(){
       $('#tabs').tabs();
       $('#col_center').show();
-      gXmpp = new BbXmpp('../ws/');
+      gXmpp = new BbXmpp('../ws/', 'admin');
       gTree = $.tree_create();
       gTree.init('#main_tree', {
         data : {},
