@@ -18,12 +18,13 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 
 /**
@@ -100,8 +101,18 @@ class XepPubsub extends Xep
      */
     const EVENT_SUBSCRIPTIONS        = 'pubsub_event_subscription';
     const EVENT_SUBSCRIPTION_OPTIONS = 'pubsub_event_subscription_options';
+    /**
+     * Subscription created
+     */
     const EVENT_SUBSCRIPTION_CREATED = 'pubsub_event_subscription_created';
+    /**
+     * Subscription deleted
+     */
     const EVENT_SUBSCRIPTION_DELETED = 'pubsub_event_subscription_deleted';
+    /**
+     * Subscription updated
+     */
+    const EVENT_SUBSCRIPTION_UPDATED = 'pubsub_event_subscription_updated';
     /**
      * Any entity may subscribe to the node (i.e., without the necessity for
      * subscription approval) and any entity may retrieve items from the node
@@ -344,10 +355,10 @@ class XepPubsub extends Xep
      */
     public function itemPublish($server, $node, $item, $id=null) {
         if (simplexml_load_string($item) === false) {
-            $this->log("published content is not valid XML", XMPPHP_Log::LEVEL_ERROR);
+            $this->log("published content is not valid XML", BbLogger::FATAL, 'XepPubsub');
             throw new XepException("published content is not valid XML", 400);
         } else {
-            if ($id) $id = "id='$id'";
+            if ($id) $id = "id=\"$id\"";
             // There's no other way to handle the response than by id
             $this->conn->addIdHandler($this->conn->getNextId(), 'handlerPubsubPublished', $this);
             $this->sendIq(array('type' => 'set', 'to' => $server, 'msg'=>"<publish node=\"$node\" ><item $id>$item</item></publish>"));
@@ -451,6 +462,28 @@ class XepPubsub extends Xep
             $this->sendIq(array('to' => $server, 'msg'=>"<subscriptions node=\"$node\"/>"), self::NS . '#owner');
         }
         return $this;
+    }
+    /**
+     * Set a subscription
+     *
+     * @param string $server       the pubsub server name
+     * @param string $node         the node name
+     * @param string $jid          user's jid (optionnal) if null, use current user's one
+     * @param string $subscription value of the subscription (none, pending, subscribed, unconfigured)
+     * @param string $subid        id of the subscription (optionnal)
+     *
+     * @return XepPubsub $this
+     */
+    public function subscriptionSet($server, $node, $jid, $subscription, $subid = null) {
+        if ($subid !== null) $subid = "subid=\"$subid\"";
+        $this->addCommonHandler(self::EVENT_SUBSCRIPTION_UPDATED);
+        $this->sendIq(
+            array(
+                'to'   => $server,
+                'type' => 'set',
+                'msg'  =>"<subscriptions node=\"$node\"><subscription jid=\"$jid\" subscription=\"$subscription\" $subid /></subscriptions>"),
+            self::NS . '#owner'
+        );
     }
 
     /**
@@ -563,11 +596,13 @@ class XepPubsub extends Xep
             $this->conn->addIdHandler($this->conn->getNextId(), 'handlerGetPending', $this);
             $form = null;
         }
-        $this->conn->xep('command')->execute('http://jabber.org/protocol/pubsub#get-pending',
+        $this->conn->xep('command')->execute(
+            'http://jabber.org/protocol/pubsub#get-pending',
             XepCommand::COMMAND_ACTION_EXECUTE,
             $sessionid,
             $form,
-            $server);
+            $server
+        );
         return $this;
     }
 
@@ -585,9 +620,9 @@ class XepPubsub extends Xep
     private function _subscriptionManage($server, $node, $jid, $allow, $subid = null) {
         $form = new XepForm();
         $req = $form->addFormtype('http://jabber.org/protocol/pubsub#subscribe_authorization')
-                    ->addField(new XepFormField('pubsub#node', $node))
-                    ->addField(new XepFormField('pubsub#subscriber_jid', $jid))
-                    ->addField(new XepFormField('pubsub#allow', $allow));
+            ->addField(new XepFormField('pubsub#node', $node))
+            ->addField(new XepFormField('pubsub#subscriber_jid', $jid))
+            ->addField(new XepFormField('pubsub#allow', $allow));
         if ($subid !== null) $form->addField(new XepField('pubsub#sibid', $subid));
         $this->conn->sendMessage($server, (string)$req);
     }
@@ -841,7 +876,18 @@ class XepPubsub extends Xep
         try {
             $res = $this->commonHandler($xml);
             if ($res->code != XepResponse::XEPRESPONSE_KO) {
-                //@TODO get the node ID of the new item
+                // get published content id
+                $res->message = array('node' => '', 'id' => '');
+                if ($xml->hasSub('pubsub')) {
+                    $pubsub = $xml->sub('pubsub');
+                    if ($pubsub->hasSub('publish')) {
+                        $publish = $pubsub->sub('publish');
+                        $res->message['node'] = $publish->attrs['node'];
+                        if ($publish->hasSub('item')) {
+                            $res->message['id'] = $publish->sub('item')->attrs['id'];
+                        }
+                    }
+                }
                 $this->conn->event(self::EVENT_ITEM_PUBLISHED, $res);
             }
         } catch (Exception $e) {
@@ -895,7 +941,7 @@ class XepPubsub extends Xep
                             $this->conn->event(self::EVENT_NOTIF_SUBSCRIPTION, $res);
                             break;
                         default:
-                            //@TODO
+                            $this->log("Unknown element in event : {$sub->name}", BbLogger::ERROR, 'XepPubsub');
                             break;
                         }
                     }
@@ -905,7 +951,6 @@ class XepPubsub extends Xep
             $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
             $this->conn->event(self::EVENT_ERROR, $res);
         }
-        $this->log("EVENT received", XMPPHP_Log::LEVEL_WARNING);
         $this->conn->event('pubsub_event_handled', $xml->toString());
     }
 
@@ -927,18 +972,23 @@ class XepPubsub extends Xep
      * @return void
      */
     public function handlerGetPending(XMPPHP_XMLObj $xml) {
-        if ($xml->attrs['type'] == 'result') {
-            $command = $xml->sub('command');
-            $form    = XepForm::load($command);
-            $options = $form->getField('pubsub#node')->getOptions();
-            if (count($options) > 0) {
-                $sessionid = $command->attrs['sessionid'];
-                foreach ($options as $option) {
-                    $this->subscriptionGetPending($option['value'], $sessionid);
+        try {
+            $res = $this->commonHandler($xml);
+            if ($res->code != XepResponse::XEPRESPONSE_KO) {
+                $command = $xml->sub('command');
+                $form    = XepForm::load($command);
+                $options = $form->getField('pubsub#node')->getOptions();
+                if (count($options) > 0) {
+                    $sessionid = $command->attrs['sessionid'];
+                    foreach ($options as $option) {
+                        // Get the detail of the pending request
+                        $this->subscriptionGetPending($option['value'], $sessionid);
+                    }
                 }
             }
-        } else {
-            //@TODO : manage errors...
+        } catch (Exception $e) {
+            $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
+            $this->conn->event(self::EVENT_ERROR, $res);
         }
     }
 }

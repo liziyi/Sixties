@@ -18,12 +18,13 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 
 /**
@@ -81,7 +82,7 @@ class XepMuc extends Xep
      *
      * @return XepCommand $this
      */
-    public function roomCreate($server = null, $room, $nick = null) {
+    public function roomCreate($server, $room, $nick = null) {
         if ($nick == null) $nick = $this->conn->getLogin();
         if ($server == null) $server = $this->mucHost;
         $room = sprintf("%s@%s/%s", $room, $server, $nick);
@@ -97,11 +98,10 @@ class XepMuc extends Xep
      *
      * @param string $server the pubsub server name
      * @param string $room   the name of the room
-     * @param string $server the server name
      *
      * @return XepCommand $this
      */
-    public function configurationGet($server = null, $room) {
+    public function configurationGet($server, $room) {
         if ($server == null) $server = $this->mucHost;
         if (strpos($room, '@') === false) $room = $room . '@' . $server;
         $req = array('to' => $room, 'msg' => "<query xmlns='http://jabber.org/protocol/muc#owner'/>");

@@ -18,12 +18,13 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 
 /**

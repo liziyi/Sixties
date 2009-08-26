@@ -34,12 +34,19 @@
 require_once "WsService.php";
 
 /**
+ * XMPP class for auth
+ */
+require_once dirname(__FILE__) . '/../sixties/XMPP2.php';
+
+/**
  * Require Hub repository class
  */
 require_once dirname(dirname(__FILE__)) . '/hub/HubRepo.php';
 
 /**
  * WsHub : Base class for the interfaces with Hub API
+ *
+ * This service use a dummy connection to Jabber server to check user auth
  *
  * @category   Library
  * @package    Sixties
@@ -64,9 +71,21 @@ class WsHub extends WsService
      * Constructor : connect to the Repository
      *
      * @param array $params connexion parameters
+     *
+     * @return void
      */
     public function __construct($params) {
-        $this->repo = new HubRepo($params['db_dsn'], $params['db_user'], $params['db_password']);
+        parent::__construct($params);
+        try {
+            // Dummy connection to check user auth
+            $jid  = $this->params['user'] . '@' . $this->params['host'];
+            $conn = XMPP2::quickConnect($jid . '/HubBot', $this->params['password']);
+            $conn->disconnect();
+            $this->repo = new HubRepo($params['db_dsn'], $params['db_user'], $params['db_password']);
+        } catch (XMPPHP_Exception $e) {
+            $this->log($e->getMessage(), BbLogger::FATAL, 'WsXep');
+            throw new WsException($e->getMessage(), WsResponse::INTERNAL);
+        }
     }
 
     /**
@@ -91,37 +110,38 @@ class WsHub extends WsService
      */
     public function handlerGet($params) {
         try {
-            // id or jid must be present
-            if (empty($params['id']) && empty($params['jid'])) {
-                throw new WsException("Missing parameter id or jid", 400);
-            }
-
-            return $this->repo->handlerRead($params['id'], $params['jid'], $params['node']);
+            $jid = $this->params['user'] . '@' . $this->params['host'];
+            $res = $this->repo->handlerRead($params['id'], $jid, $params['node']);
+            return new WsResponse($res, WsResponse::OK);
+        } catch (WsException $e) {
+            return new WsResponse($e->getMessage(), $e->getCode());
         } catch (Exception $e) {
-            return new WsResponse($e->getMessage(), WsResponse::WS_RESPONSE_KO);
+            return new WsResponse($e->getMessage(), WsResponse::KO);
         }
     }
     /**
-     * Create handlers
+     * Create handlers for the current connected user
      *
      * Parameters:
-     * - jid    (required)
      * - node   (required)
      * - class  (required)
-     * - params (required)
+     * - form   (required) the parameters
      *
      * @param array $params parameters
      *
      * @return WsResponse
      */
     public function handlerPost($params) {
-        $this->checkparams(array('jid', 'node', 'class', 'params'), $params);
+        $this->checkparams(array('node', 'class', 'form'), $params);
         try {
-            $handler = HubHandler::handlerLoad($params['class'], array($params['jid'], $params['node'], $params['class'], $params['params']));
+            $jid     = $this->params['user'] . '@' . $this->params['host'];
+            $handler = HubHandler::handlerLoad($params['class'], array($jid, $this->params['password'], $params['node'], $params['class'], $params['form']));
             $this->repo->handlerCreate($handler);
-            return new WsResponse('', WsResponse::WS_RESPONSE_OK);
+            return new WsResponse('', WsResponse::OK);
+        } catch (WsException $e) {
+            return new WsResponse($e->getMessage(), $e->getCode());
         } catch (Exception $e) {
-            return new WsResponse($e->getMessage(), WsResponse::WS_RESPONSE_KO);
+            return new WsResponse($e->getMessage(), WsResponse::KO);
         }
     }
     /**
@@ -129,7 +149,6 @@ class WsHub extends WsService
      *
      * Parameters:
      * - id     (required)
-     * - jid    (required)
      * - node   (required)
      * - class  (required)
      * - params (required)
@@ -139,13 +158,16 @@ class WsHub extends WsService
      * @return WsResponse
      */
     public function handlerPut($params) {
-        $this->checkparams(array('id', 'jid', 'node', 'class', 'params'), $params);
+        $this->checkparams(array('id', 'node', 'class', 'form'), $params);
         try {
-            $handler = HubHandler::handlerLoad($params['class'], array($params['jid'], $params['node'], $params['class'], $params['params'], $params['id']));
+            $jid     = $this->params['user'] . '@' . $this->params['host'];
+            $handler = HubHandler::handlerLoad($params['class'], array($jid, $this->params['password'], $params['node'], $params['class'], $params['form'], $params['id']));
             $this->repo->handlerUpdate($handler);
-            return new WsResponse('', WsResponse::WS_RESPONSE_OK);
+            return new WsResponse('', WsResponse::OK);
+        } catch (WsException $e) {
+            return new WsResponse($e->getMessage(), $e->getCode());
         } catch (Exception $e) {
-            return new WsResponse($e->getMessage(), WsResponse::WS_RESPONSE_KO);
+            return new WsResponse($e->getMessage(), WsResponse::KO);
         }
     }
     /**
@@ -162,12 +184,67 @@ class WsHub extends WsService
         $this->checkparams(array('id'), $params);
         try {
             // It's just for deletion, we don't need to load a real handler
-            $handler = new HubHandler($params['jid'], $params['node'], $params['class'], $params['params'], $params['id']);
+            $jid     = $this->params['user'] . '@' . $this->params['host'];
+            $handler = new HubHandler($jid, null, null, null, null, $params['id']);
             $this->repo->handlerDelete($handler);
-            return new WsResponse('', WsResponse::WS_RESPONSE_OK);
+            return new WsResponse('', WsResponse::OK);
+        } catch (WsException $e) {
+            return new WsResponse($e->getMessage(), $e->getCode());
         } catch (Exception $e) {
-            return new WsResponse($e->getMessage(), WsResponse::WS_RESPONSE_KO);
+            return new WsResponse($e->getMessage(), WsResponse::KO);
         }
     }
 
+    /**
+     * Get the form to edit a handler
+     *
+     * id or class are required
+     * Parameters:
+     * - id
+     * - class
+     *
+     * @param array $params parameters
+     *
+     * @return WsResponse
+     */
+    public function formGet($params) {
+        try {
+            // id or class
+            if (empty($params['id']) && empty($params['class'])) {
+                $this->log("Invalid parameters", BbLogger::FATAL, 'WsXep');
+                throw new WsException("Missing parameter id or class", WsResponse::BAD_REQUEST);
+            }
+            if (empty($params['id'])) {
+                // Request new form
+                $handler = HubHandler::handlerLoad($params['class'], array('', '', '', $params['class'], null));
+            } else {
+                // Load handler
+                $res = $this->repo->handlerRead($params['id']);
+                if (count($res) != 1) {
+                    $this->log("wrong number of handlers for {$params['id']} : " . count($res), BbLogger::FATAL, 'WsXep');
+                    throw new WsException("No such handler", WsResponse::NOT_FOUND);
+                }
+                $handler = HubHandler::handlerLoad($res[0]->class, array($res[0]->jid, $res[0]->password, $res[0]->node, $res[0]->class, $res[0]->params, $res[0]->id));
+            }
+            if ($handler) return new WsResponse($handler->formLoad(), WsResponse::OK);
+            else return new WsResponse('Unable to load handler', WsResponse::KO);
+        } catch (WsException $e) {
+            return new WsResponse($e->getMessage(), $e->getCode());
+        } catch (Exception $e) {
+            return new WsResponse($e->getMessage(), WsResponse::KO);
+        }
+    }
+
+    /**
+     * Get the list of available handlers classes
+     *
+     * Parameters: none
+     *
+     * @param array $params parameters
+     *
+     * @return WsResponse
+     */
+    public function classGet($params) {
+        return new WsResponse(HubHandler::handlersGet(), WsResponse::OK);
+    }
 }

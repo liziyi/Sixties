@@ -83,11 +83,12 @@ abstract class BbBase
      *
      * @param string  $message  the message
      * @param integer $severity a BbLogger constant
+     * @param string  $context  additionnal context info
      *
      * @return BbBase this
      */
-    public function log($message, $severity = BbLogger::INFO) {
-        if ($this->_logger) $this->_logger->log($message, $severity);
+    public function log($message, $severity = BbLogger::INFO, $context = '') {
+        if ($this->_logger) $this->_logger->log($message, $severity, $context);
         else var_dump($message);
         return $this;
     }
@@ -181,7 +182,7 @@ class BbLogger
      */
     public function log($message, $level = BbLogger::INFO, $context = '') {
         if ($level <= $this->_level) {
-            $res = sprintf("[%s][%s][%s] %s\n", date('c'), $this->labels[$level], $context, $message);
+            $res = sprintf("[%s][%s][%s] %s", date('c'), $this->labels[$level], $context, $message);
             file_put_contents($this->_logPath, $res . "\n", FILE_APPEND);
         }
         return $this;

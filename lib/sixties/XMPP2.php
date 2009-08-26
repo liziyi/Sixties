@@ -18,12 +18,13 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 
 /**
@@ -53,16 +54,15 @@ require_once dirname(__FILE__) . '/XepForm.php';
  */
 class XMPP2 extends XMPPHP_XMPP
 {
+    /**
+     * @var BbLogger $logger the logger
+     */
+    private $_logger;
 
     /**
      * @var boolean should we display raw XML sent and received ?
      */
     public $logXml = false;
-
-    /**
-     * @var string path of the file to log XML streams
-     */
-    public $logPath = 'php://output';
 
     /**
      * @var boolean set to true only for unit tests purpose
@@ -72,7 +72,7 @@ class XMPP2 extends XMPPHP_XMPP
     /**
      * @var array history of requests and responses
      */
-    public $history = array();
+    protected $history = array();
 
     /**
      * @var array xep array of available extentions
@@ -92,6 +92,8 @@ class XMPP2 extends XMPPHP_XMPP
      * @param string  $loglevel log level
      */
     public function __construct($host, $port = 5222, $user = '', $password = '', $resource = 'XMPPHP', $server = null, $printlog = false, $loglevel = null) {
+        $this->_logger = bbLogger::get();
+
         parent::__construct($host, $port, $user, $password, $resource, $server, $printlog, $loglevel);
 
         $this->addXPathHandler('{jabber:client}message', 'handlerFormMessage', $this);
@@ -162,6 +164,30 @@ class XMPP2 extends XMPPHP_XMPP
     }
 
     /**
+     * Connect to a Jabber server with minimal parameters
+     *
+     * @param string $jid      bare (user@server) or full (user@server/resource) JID
+     * @param string $password password
+     *
+     * @return XMPP2
+     */
+    public function quickConnect($jid, $password) {
+        $tmp = explode('@', $jid);
+        if (count($tmp) != 2) {
+            $this->log("Wrong jid $jid", BbLogger::ERROR, 'XMPP2');
+            throw new XMPPHP_Exception("Wrong jid $jid");
+        }
+        $user     = $tmp[0];
+        $tmp2     = explode('/', $tmp[1]);
+        $server   = $tmp2[0];
+        $resource = (count($tmp2) == 2 ? $tmp2[1] : uniqid('XMPPHP'));
+        $conn = new self($server, '5222', $user, $password, $resource);
+        $conn->connect();
+        $conn->processUntil('session_start');
+        return $conn;
+    }
+
+    /**
      * Return a service.
      *
      * Services are loaded on demand
@@ -181,16 +207,13 @@ class XMPP2 extends XMPPHP_XMPP
                 if (file_exists($filename)) {
                     include_once $filename;
                     $this->xep[$service] = new $classname($this);
-                } else {
-                    $this->log->log("Unable to load $filename", XMPPHP_Log::LEVEL_ERROR);
                 }
             } else {
                 $this->xep[$service] = new $classname($this);
             }
             if (!isset($this->xep[$service])) {
-                // return dummy service
-                //@TODO : what shall we do ? return null ? throw an exception ?
-                $this->xep[$service] = new Xep($this);
+                $this->log("Unable to load XEP $service", BbLogger::ERROR, 'XMPP2');
+                throw new XMPPHP_Exception("Enable to load XEP $service");
             }
         }
         return $this->xep[$service];
@@ -207,12 +230,16 @@ class XMPP2 extends XMPPHP_XMPP
      */
     public function sendIq($params){
         $lastid = $this->getId();
-        $res = $this->send(sprintf('<iq id="%s" from="%s" to="%s" type="%s" >%s</iq>',
-            $lastid,
-            $this->fulljid,
-            ($params['to']?$params['to']:$this->host),
-            ($params['type']?$params['type']:'get'),
-            $params['msg']));
+        $res = $this->send(
+            sprintf(
+                '<iq id="%s" from="%s" to="%s" type="%s" >%s</iq>',
+                $lastid,
+                $this->fulljid,
+                ($params['to']?$params['to']:$this->host),
+                ($params['type']?$params['type']:'get'),
+                $params['msg']
+            )
+        );
         if (!isset($this->history[$lastid])) $this->history[$lastid] = array();
         $this->history[$lastid]['sent'] = time();
         $this->history[$lastid]['type'] = 'iq';
@@ -229,11 +256,15 @@ class XMPP2 extends XMPPHP_XMPP
      */
     public function sendMessage($to, $message) {
         $lastid = $this->getId();
-        $res = $this->send(sprintf('<message from="%s" to="%s" id="%s">%s</message>',
-            $this->fulljid,
-            $to,
-            $lastid,
-            $message));
+        $res = $this->send(
+            sprintf(
+                '<message from="%s" to="%s" id="%s">%s</message>',
+                $this->fulljid,
+                $to,
+                $lastid,
+                $message
+            )
+        );
         if (!isset($this->history[$lastid])) $this->history[$lastid] = array();
         $this->history[$lastid]['sent'] = time();
         $this->history[$lastid]['type'] = 'message';
@@ -250,10 +281,14 @@ class XMPP2 extends XMPPHP_XMPP
      */
     public function sendPresence($to, $message) {
         $lastid = $this->getId();
-        $res = $this->send(sprintf('<presence from="%s" to="%s">%s</presence>',
-            $this->fulljid,
-            $to,
-            $message));
+        $res = $this->send(
+            sprintf(
+                '<presence from="%s" to="%s">%s</presence>',
+                $this->fulljid,
+                $to,
+                $message
+            )
+        );
         $lastid = $this->getLastId();
         if (!isset($this->history[$lastid])) $this->history[$lastid] = array();
         $this->history[$lastid]['sent'] = time();
@@ -266,12 +301,75 @@ class XMPP2 extends XMPPHP_XMPP
      *
      * @param XMPPHP_XMLObj $xml the result
      *
-     * @return $this
+     * @return XMPP2 $this
      */
     public function history(XMPPHP_XMLObj $xml) {
         if ($xml->attrs['id']) {
             $this->history[$xml->attrs['id']]['received'] = time();
         }
+        return $this;
+    }
+
+    /**
+     * Set a value in the request history
+     *
+     * @param string $id  the IQ id
+     * @param string $key key
+     * @param string $val value
+     *
+     * @return XMPP2 $this
+     */
+    public function historySet($id, $key, $val) {
+        if (!isset($this->history[$id])) $this->conn->history[$id] = array();
+        $this->history[$id][$key] = $val;
+        return $this;
+    }
+
+    /**
+     * Get a value from the request history
+     *
+     * @param string $id  the IQ id
+     * @param string $key key
+     *
+     * @return mixed
+     */
+    public function historyGet($id, $key) {
+        if (!isset($this->history[$id])) return null;
+        else return $this->history[$id][$key];
+    }
+
+    /**
+     * Set the logger
+     *
+     * @param BbLogger $logger the logger instance
+     *
+     * @return BbBase this
+     */
+    public function loggerSet(BbLogger $logger) {
+        $this->_logger = $logger;
+        return $this;
+    }
+
+    /**
+     * Get the logger
+     *
+     * @return BbLogger
+     */
+    public function loggerGet() {
+        return $this->_logger;
+    }
+
+    /**
+     * Log a message
+     *
+     * @param string  $message  the message
+     * @param integer $severity a BbLogger constant
+     * @param string  $context  additionnal context info
+     *
+     * @return BbBase this
+     */
+    public function log($message, $severity = BbLogger::INFO, $context = '') {
+        if ($this->_logger) $this->_logger->log($message, $severity, $context);
         return $this;
     }
 
@@ -302,8 +400,7 @@ class XMPP2 extends XMPPHP_XMPP
                 if (PHP_SAPI != 'cli') {
                     //$res = nl2br(htmlspecialchars($res));
                 }
-                file_put_contents($this->logPath, $res, FILE_APPEND);
-                //flush();
+                $this->log($res, BbLogger::DEBUG);
             }
         }
     }

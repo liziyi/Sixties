@@ -18,13 +18,19 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
+
+/**
+ * Common classes
+ */
+require_once dirname(dirname(__FILE__)) . '/bb/BbCommon.php';
 
 /**
  * XepForm : implement client-side XEP 0004 : data forms
@@ -86,7 +92,7 @@ class XepForm
      *
      * @return XepForm
      *
-     * @TODO manage reported and item tags
+     * @TODO : manage reported and item tags
      */
     static function load(XMPPHP_XMLObj $xml) {
         if ($xml->name != 'x' && $xml->hasSub('x')) $xml = $xml->sub('x');
@@ -106,8 +112,7 @@ class XepForm
                     $form->addField(XepFormField::load($sub));
                     break;
                 default:
-                    // @FIXME
-                    echo "beup : {$sub->name}\n";
+                    BbLogger::get()->log("Unknown form element {$sub->name}", BbLogger::WARNING, 'XepForm');
                 }
             }
         }
@@ -294,12 +299,12 @@ class XepFormField
     /**
      * Create a new form field
      *
-     * @param string  $var       name of the field
-     * @param mixed   $value     value (single value or array)
-     * @param string  $type      type
-     * @param boolean $required  is the field required ?
-     * @param string  $label     label for the field
-     * @param string  $desc      description for the field
+     * @param string  $var      name of the field
+     * @param mixed   $value    value (single value or array)
+     * @param string  $type     type
+     * @param boolean $required is the field required ?
+     * @param string  $label    label for the field
+     * @param string  $desc     description for the field
      *
      * @return void
      */
@@ -338,8 +343,7 @@ class XepFormField
                     $field->addOption(array('label' => $sub->attrs['label'], 'value' => $sub->sub('value')->data));
                     break;
                 default:
-                    // @FIXME
-                    echo "beup-field : {$sub->name}\n";
+                    BbLogger::get()->log("Unknown form field element {$sub->name}", BbLogger::WARNING, 'XepForm');
                 }
             }
         }
@@ -363,7 +367,7 @@ class XepFormField
         if (count($this->options) > 0) {
             foreach ($this->options as $option) {
                 $label = (empty($option['label']) ? '' : " label=\"{$option['label']}\"");
-                $res .= "<option $label>{$option['value']}</option>";
+                $res .= "<option $label><value>{$option['value']}</value></option>";
             }
         }
         $res = "<field label=\"{$this->label}\" type=\"{$this->type}\" var=\"{$this->var}\">$res</field>";
@@ -374,20 +378,139 @@ class XepFormField
      * Getters and setters
      *
      ************************************************************************************/
+    /**
+     * Get the field label
+     *
+     * @return string
+     */
     public function getLabel() { return $this->label; }
+    /**
+     * Set the field label
+     *
+     * @param string $label the label
+     *
+     * @return XepFormField this
+     */
     public function setLabel($label) { $this->label = $label; return $this;}
+    /**
+     * Get the field type
+     *
+     * @return string
+     */
     public function getType() { return $this->type; }
+    /**
+     * Set the field type
+     *
+     * @param string $type the field type
+     *
+     * @return XepFormField this
+     */
     public function setType($type) { $this->type = $type; return $this;}
+    /**
+     * Get the field name
+     *
+     * @return string
+     */
     public function getVar() { return $this->var; }
+    /**
+     * Set the field name
+     *
+     * @param string $var the name
+     *
+     * @return XepFormField this
+     */
     public function setVar($var) { $this->var = $var; return $this;}
+    /**
+     * Get the field description
+     *
+     * @return string
+     */
     public function getDesc() { return $this->desc; }
+    /**
+     * Set the field description
+     *
+     * @param string $desc the description
+     *
+     * @return XepFormField this
+     */
     public function setDesc($desc) { $this->desc = $desc; return $this;}
+    /**
+     * Is the field required ?
+     *
+     * @return boolean
+     */
     public function getRequired() { return $this->required; }
+    /**
+     * Set if the field is required
+     *
+     * @param boolean $required the required value
+     *
+     * @return XepFormField this
+     */
     public function setRequired($required = true) { $this->required = $required; return $this;}
+    /**
+     * Get the field options
+     *
+     * @return array
+     */
     public function getOptions() { return $this->options; }
-    public function addOption($val) { $this->options[] = $val; return $this;}
+    /**
+     * Set the options of he field
+     *
+     * @param array $options array arrays of label and value
+     *
+     * @return XepFormField this
+     */
+    public function setOptions($options) {
+        if (!is_array($options)) {
+            throw new Exception("Wrong options");
+        }
+        foreach ($options as $option) {
+            $this->addOption($option);
+        }
+        return $this;
+    }
+    /**
+     * Add an option to the field
+     *
+     * @param array $option array of label and value
+     *
+     * @return XepFormField this
+     */
+    public function addOption($option){
+        if (!is_array($option) || !isset($option['label']) || !isset($option['value'])) {
+            throw new Exception("Wrong option");
+        }
+        $this->options[] = $option;
+        return $this;
+    }
+    /**
+     * Get the field values
+     *
+     * @return array
+     */
     public function getValues() { return $this->values; }
-    public function addValue($val) { $this->values[] = $val; return $this;}
+    /**
+     * Add a value
+     *
+     * @param mixed $val the value
+     *
+     * @return XepFormField this
+     */
+    public function addValue($val) {
+        // cf XEP-0004 3.3 : Data provided for fields of type "text-multi" SHOULD NOT contain any newlines.
+        // Instead, the application SHOULD split the data into multiple strings (based on the newlines inserted by the platform),
+        // then specify each string as the XML character data of a distinct <value/> element
+        if ($this->type == self::FIELD_TYPE_TEXTMULTI || $this->type == '') {
+            $vals = explode("\n", $val);
+            foreach ($vals as $v) {
+                $this->values[] = $v;
+            }
+        } else {
+            $this->values[] = $val;
+        }
+        return $this;
+    }
     /**
      * Get the value of the field
      *

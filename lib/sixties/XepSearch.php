@@ -18,12 +18,13 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 
 /**
@@ -126,7 +127,7 @@ class XepSearch extends Xep
                     case 'last':
                     case 'nick':
                     case 'email':
-                        //@TODO
+                        //@TODO : manage "old" search form
                     case 'x':
                         // Data form
                         $res->message['form'] = $sub->toString();
@@ -161,7 +162,7 @@ class XepSearch extends Xep
                         $res->message['form'] = $sub->toString();
                         break;
                     default:
-                        //@TODO
+                        //@TODO : manage "old" search form
                     }
                 }
                 $this->conn->event(self::EVENT_RESULT, $res);

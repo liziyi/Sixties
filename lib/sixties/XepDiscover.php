@@ -18,12 +18,13 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 
 /**
@@ -78,7 +79,13 @@ class XepDiscover extends Xep
      */
     public function discoverInfo($server = null, $node = null) {
         if (is_null($server)) $server = $this->conn->getHost();
-        if (!is_null($node)) $node = "node='$node'";
+        if (!is_null($node)) {
+            // Save node in history because some servers forget to include it in the result
+            $nextid = $this->conn->getNextId();
+            $this->conn->historySet($nextid, 'node', $node);
+
+            $node = "node='$node'";
+        }
         $this->conn->sendIq(array('to'=>$server, 'msg'=>"<query xmlns='http://jabber.org/protocol/disco#info' $node />"));
         return $this;
     }
@@ -93,7 +100,13 @@ class XepDiscover extends Xep
      */
     public function discoverItems($server = null, $node = null) {
         if (is_null($server)) $server = $this->conn->getHost();
-        if (!is_null($node)) $node = "node='$node'";
+        if (!is_null($node)) {
+            // Save node in history because some servers forget to include it in the result
+            $nextid = $this->conn->getNextId();
+            $this->conn->historySet($nextid, 'node', $node);
+
+            $node = "node='$node'";
+        }
         $this->conn->sendIq(array('to' => $server,'msg'=>"<query xmlns='http://jabber.org/protocol/disco#items' $node />"));
         return $this;
     }
@@ -110,11 +123,21 @@ class XepDiscover extends Xep
             $res = $this->commonHandler($xml);
             if ($res->code != XepResponse::XEPRESPONSE_KO) {
                 $query   = $xml->sub('query');
-                $node    = $xml->attrs['from'] . ($query->attrs['node'] ? '!' . $query->attrs['node'] : '');
+                $node    = $xml->attrs['from'];
+                if ($query->attrs['node']) {
+                    $node .= '!' . $query->attrs['node'];
+                } else {
+                    // some servers forget to set node in the result
+                    $tmp = $this->conn->historyGet($xml->attrs['id'], 'node');
+                    if ($tmp) $node .= '!' . $tmp;
+                }
                 $items   = array($node => array('items'=>array()));
                 foreach ($query->subs as $sub) {
                     if ($sub->name == 'item') {
                         $key = $sub->attrs['jid'] . ($sub->attrs['node'] ? '!' . $sub->attrs['node'] : '');
+                        // hack for ejabberd : items must not have a 'node' attribute
+                        $parentLength = strlen($query->attrs['node']);
+                        if (substr($sub->attrs['node'], $parentLength, 1) == '!') unset($sub->attrs['node']);
                         $items[$node]['items'][$key] = array(
                             'jid'  => $sub->attrs['jid'],
                             'name' => ($sub->attrs['name'] ? $sub->attrs['name']: ''),
@@ -142,7 +165,14 @@ class XepDiscover extends Xep
             $res = $this->commonHandler($xml);
             if ($res->code != XepResponse::XEPRESPONSE_KO) {
                 $query   = $xml->sub('query');
-                $node    = $xml->attrs['from'] . ($query->attrs['node'] ? '!' . $query->attrs['node'] : '');
+                $node    = $xml->attrs['from'];
+                if ($query->attrs['node']) {
+                    $node .= '!' . $query->attrs['node'];
+                } else {
+                    // some servers forget to set node in the result
+                    $tmp = $this->conn->historyGet($xml->attrs['id'], 'node');
+                    if ($tmp) $node .= '!' . $tmp;
+                }
                 $message = array($node => array('identities'=>array(), 'features'=>array(), 'meta' => array()));
                 foreach ($query->subs as $sub) {
                     if ($sub->name == 'identity') {

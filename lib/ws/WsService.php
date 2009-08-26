@@ -28,6 +28,11 @@
  */
 
 /**
+ * Common classes
+ */
+require_once dirname(dirname(__FILE__)) . '/bb/BbCommon.php';
+
+/**
  * WsService : base for all web services classes called by BbRest
  *
  * @category   Library
@@ -39,8 +44,24 @@
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
  */
-abstract class WsService
+abstract class WsService extends BbBase
 {
+    /**
+     * @var array web service parameters
+     */
+    protected $params;
+
+    /**
+     * Constructor
+     *
+     * @param array $params web service parameters
+     *
+     * @return void
+     */
+    public function __construct($params) {
+        parent::__construct();
+        $this->params  = $params;
+    }
 
     /**
      * Get the list of all available actions for a module
@@ -70,7 +91,7 @@ abstract class WsService
                 }
             }
         }
-        return new WsResponse($result, WsResponse::WS_RESPONSE_OK);
+        return new WsResponse($result, WsResponse::OK);
     }
 
     /**
@@ -86,7 +107,8 @@ abstract class WsService
     protected function checkparams($expected, $actual) {
         foreach ($expected as $param) {
             if (!isset($actual[$param])) {
-                throw new WsException("Missing parameter $param ", 400);
+                $this->log("Invalid parameters", BbLogger::FATAL, 'WsXep');
+                throw new WsException("Missing parameter $param ", WsResponse::BAD_REQUEST);
             }
         }
         return true;
@@ -122,23 +144,15 @@ class WsException extends Exception
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
  */
-class WsResponse
+class WsResponse extends BbResponse
 {
-    public $code;
-    public $message;
-
-    const WS_RESPONSE_OK = 200;
-    const WS_RESPONSE_KO = 500;
-    /**
-     * Constructor
-     *
-     * @param mixed   $message the content of the response
-     * @param integer $code    ok or ko
-     *
-     * @return void
-     */
-    public function __construct($message = '', $code = 200){
-        $this->message = $message;
-        $this->code    = $code;
-    }
+    const OK                 = 200;
+    const BAD_REQUEST        = 400;
+    const NOT_FOUND          = 404;
+    const METHOD_NOT_ALLOWED = 405;
+    const NOT_ACCEPTABLE     = 406;
+    const KO                 = 500;
+    const INTERNAL           = 500;
+    const NOT_IMPLEMENTED    = 501;
+    const UNAVAILABLE        = 503;
 }

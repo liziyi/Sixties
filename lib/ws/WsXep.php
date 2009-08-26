@@ -57,41 +57,46 @@ class WsXep extends WsService
      */
     protected $timeout;
 
-    protected $params;
-
     /**
      * Constructor : connect to the XMPP server
      *
      * @param array $params connexion parameters
+     *
+     * @return void
      */
     public function __construct($params) {
-        // set default timeout : 5s
-        $this->timeout = 5;
-        $this->params  = $params;
-        if (is_array($params)) {
-            switch ($params['port']) {
-            case '5280':
-                include_once dirname(__FILE__) . '/../sixties/XMPP_BOSH.php';
-                session_start();
-                $this->conn = new XMPPHP_BOSH($params['host'], $params['port'], $params['user'], $params['password'], uniqid(get_class($this)), $params['server'], false, XMPPHP_Log::LEVEL_INFO);
-                // Use XMPP over BOSH
-                $this->conn->connect("http://{$params['host']}:{$params['port']}/http-bind", 1, true);
-                // Pinging the server is always a good idea ;)
-                $this->conn->xep('ping')->ping();
-                $res = $this->process(XepPing::EVENT_PONG);
-                //@TODO : if it still don't work, do as in BbRest : if 503, go to sleep and try later
-                break;
-            default:
-                include_once dirname(__FILE__) . '/../sixties/XMPP2.php';
-                $this->conn = new XMPP2($params['host'], $params['port'], $params['user'], $params['password'], uniqid(get_class($this)), $params['server'], false, XMPPHP_Log::LEVEL_INFO);
-                $this->conn->connect();
-                $this->conn->processUntil('session_start', 10);
-                break;
+        parent::__construct($params);
+        try {
+            // set default timeout : 5s
+            $this->timeout = 5;
+            if (is_array($params)) {
+                switch ($params['port']) {
+                case '5280':
+                    include_once dirname(__FILE__) . '/../sixties/XMPP_BOSH.php';
+                    session_start();
+                    $this->conn = new XMPPHP_BOSH($params['host'], $params['port'], $params['user'], $params['password'], uniqid(get_class($this)), $params['server'], false, XMPPHP_Log::LEVEL_INFO);
+                    // Use XMPP over BOSH
+                    $this->conn->connect("http://{$params['host']}:{$params['port']}/http-bind", 1, true);
+                    // Pinging the server is always a good idea ;)
+                    $this->conn->xep('ping')->ping();
+                    $res = $this->process(XepPing::EVENT_PONG);
+                    //@TODO : if it still don't work, do as in BbRest : if 503, go to sleep and try later
+                    break;
+                default:
+                    include_once dirname(__FILE__) . '/../sixties/XMPP2.php';
+                    $this->conn = new XMPP2($params['host'], $params['port'], $params['user'], $params['password'], uniqid(get_class($this)), $params['server'], false, XMPPHP_Log::LEVEL_INFO);
+                    $this->conn->connect();
+                    $this->conn->processUntil('session_start', 10);
+                    break;
+                }
+                $this->conn->logXml = true;
+            } else {
+                $this->log("No parameters given, unable to connect", BbLogger::FATAL, 'WsXep');
+                throw new WsException("No parameters given, unable to connect", WsResponse::INTERNAL);
             }
-            $this->conn->logPath = '/tmp/xmpp.log';
-            $this->conn->logXml = true;
-        } else {
-            //@TODO : set the connexion
+        } catch (XMPPHP_Exception $e) {
+            $this->log($e->getMessage(), BbLogger::FATAL, 'WsXep');
+            throw new WsException($e->getMessage(), WsResponse::INTERNAL);
         }
     }
 
@@ -143,7 +148,7 @@ class WsXep extends WsService
         } else {
             $message = 'Unknown error';
         }
-        return new WsResponse($message, WsResponse::WS_RESPONSE_KO);
+        return new WsResponse($message, WsResponse::KO);
     }
 
     /**

@@ -1,6 +1,6 @@
 <?php
 /**
- * This file is part of Sixties, a set of classes extending XMPPHP, the PHP XMPP library from Nathanael C Fritz
+ * This file is part of Sixties, a set of PHP classes for playing with XMPP PubSub
  *
  * Copyright (C) 2009  Clochix.net
  *
@@ -18,12 +18,14 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage WebService
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @version    $Id$
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 
 /**
@@ -58,7 +60,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      */
     public function nodePost($params) {
         $this->checkparams(array('node'), $params);
@@ -76,7 +78,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      *
      * @UrlMap({'node', 'server'})
      */
@@ -99,7 +101,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      */
     public function nodePut($params) {
         $this->checkparams(array('node', 'form'), $params);
@@ -115,7 +117,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      */
     public function nodeDelete($params) {
         $this->checkparams(array('node'), $params);
@@ -135,7 +137,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      *
      * @UrlMap('server', 'node')
      */
@@ -154,7 +156,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      */
     public function affiliationPost($params) {
         $this->checkparams(array('node', 'jid', 'affiliation'), $params);
@@ -174,7 +176,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      *
      * @UrlMap('server', 'node')
      */
@@ -182,7 +184,6 @@ class WsXepPubsub extends WsXep
         $this->conn->xep('pubsub')->subscriptionGet($params['server'], $params['node']);
         return $this->process(XepPubsub::EVENT_SUBSCRIPTIONS);
     }
-
     /**
      * Subscribe to a node
      *
@@ -193,7 +194,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      *
      * @UrlMap('server', 'node')
      */
@@ -201,6 +202,26 @@ class WsXepPubsub extends WsXep
         $this->checkparams(array('server', 'node'), $params);
         $this->conn->xep('pubsub')->subscribe($params['server'], $params['node'], $params['options']);
         return $this->process(XepPubsub::EVENT_SUBSCRIPTION_CREATED);
+    }
+    /**
+     * Set or update subscription
+     *
+     * Parameters:
+     * - server       (required)
+     * - node         (required)
+     * - jid          (required) jid of the user
+     * - subscription (required) subscription state
+     * - subid        (optionnal) subscription id
+     *
+     * @param array $params parameters
+     *
+     * @return WsResponse|XepResponse
+     */
+    public function subscriptionPut($params) {
+        $this->checkparams(array('server', 'node', 'jid', 'subscription'), $params);
+        $this->conn->xep('pubsub')->subscriptionSet($params['server'], $params['node'], $params['jid'], $params['subscription'], $params['subid']);
+        return $this->process(XepPubsub::EVENT_SUBSCRIPTION_UPDATED);
+
     }
     /**
      * Get subscription options
@@ -213,9 +234,9 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      */
-    public function subscriptionOptions($params) {
+    public function optionsGet($params) {
         $this->checkparams(array('node'), $params);
         $this->conn->xep('pubsub')->subscriptionOptionsGet($params['server'], $params['node'], $params['subid'], $params['jid']);
         return $this->process(XepPubsub::EVENT_SUBSCRIPTION_OPTIONS);
@@ -232,9 +253,9 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      */
-    public function subscriptionPut($params) {
+    public function optionsPut($params) {
         $this->checkparams(array('node', 'form'), $params);
         $this->conn->xep('pubsub')->subscriptionOptionsSet($params['server'], $params['node'], $params['form'], $params['subid'], $params['jid']);
         return $this->process(XepPubsub::EVENT_OK);
@@ -250,7 +271,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      */
     public function subscriptionDelete($params) {
         $this->checkparams(array('node'), $params);
@@ -268,7 +289,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      *
      * @UrlMap('server', 'node')
      */
@@ -288,7 +309,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      */
     public function itemPost($params) {
         $this->checkparams(array('server', 'node', 'item'), $params);
@@ -308,7 +329,7 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      */
     public function itemDelete($params) {
         $this->checkparams(array('server', 'node'), $params);
@@ -321,24 +342,24 @@ class WsXepPubsub extends WsXep
      *
      * @param array $params parameters
      *
-     * @return XepResponse
+     * @return WsResponse|XepResponse
      */
     public function atomOptions($params) {
         $uuid = $this->_getUuid();
         $form = new XepForm();
         $form->addField(new XepFormField('Title', '', XepFormField::FIELD_TYPE_TEXTSINGLE, true, 'Title'))
-             ->addField(new XepFormField('Summary', '', XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Summary'))
-             ->addField(new XepFormField('Content', '', XepFormField::FIELD_TYPE_TEXTMULTI, false, 'Content'))
-             ->addField(new XepFormField('Author', $this->params['user'], XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Author'))
-             ->addField(new XepFormField('Contributor', $this->params['user'], XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Contributor'))
-             ->addField(new XepFormField('Category', '', XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Category'))
-             ->addField(new XepFormField('Link', '', XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Link'))
-             ->addField(new XepFormField('Published', date('c'), XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Published'))
-             ->addField(new XepFormField('Updated', date('c'), XepFormField::FIELD_TYPE_TEXTSINGLE, true, 'Updated'))
-             ->addField(new XepFormField('Rights', '', XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Rights'))
-             ->addField(new XepFormField('Source', '', XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Source'))
-             ->addField(new XepFormField('Id', $uuid, XepFormField::FIELD_TYPE_TEXTSINGLE, true, 'Id'));
-        return new XepResponse(array('form' => (string)$form), XepResponse::XEPRESPONSE_OK);
+            ->addField(new XepFormField('Summary', '', XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Summary'))
+            ->addField(new XepFormField('Content', '', XepFormField::FIELD_TYPE_TEXTMULTI, false, 'Content'))
+            ->addField(new XepFormField('Author', $this->params['user'], XepFormField::FIELD_TYPE_TEXTSINGLE, true, 'Author'))
+            ->addField(new XepFormField('Contributor', $this->params['user'], XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Contributor'))
+            ->addField(new XepFormField('Category', '', XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Category'))
+            ->addField(new XepFormField('Link', '', XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Link'))
+            ->addField(new XepFormField('Published', date('c'), XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Published'))
+            ->addField(new XepFormField('Updated', date('c'), XepFormField::FIELD_TYPE_TEXTSINGLE, true, 'Updated'))
+            ->addField(new XepFormField('Rights', '', XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Rights'))
+            ->addField(new XepFormField('Source', '', XepFormField::FIELD_TYPE_TEXTSINGLE, false, 'Source'))
+            ->addField(new XepFormField('Id', $uuid, XepFormField::FIELD_TYPE_TEXTSINGLE, true, 'Id'));
+        return new WsResponse(array('form' => (string)$form), WsResponse::OK);
     }
 
     /**

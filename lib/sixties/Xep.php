@@ -18,13 +18,19 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
+
+/**
+ * Common classes
+ */
+require_once dirname(dirname(__FILE__)) . '/bb/BbCommon.php';
 
 /**
  * Require XMPP library
@@ -42,13 +48,11 @@ require_once dirname(__FILE__) . '/XMPP2.php';
  * @license    http://www.gnu.org/licenses/gpl.txt GPL
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
- *
- * @TODO : should be abstract ?
  */
-class Xep
+abstract class Xep extends BbBase
 {
     /**
-     * @var XMPPHP_XMPP conn : the current connection
+     * @var XMPPHP_XMPP $conn : the current connection
      */
     protected $conn;
     /**
@@ -59,6 +63,7 @@ class Xep
      * @return void
      */
     public function __construct(XMPP2 $conn) {
+        parent::__construct();
         static $initialized = false;
         $this->conn = $conn;
         if (!$initialized) {
@@ -72,18 +77,6 @@ class Xep
     const EVENT_OK    = 'xep_event_ok';
 
     /**
-     * Wrapper to logger
-     *
-     * @param string  $msg      the message
-     * @param integer $runlevel one of XMPPHP_Log::LEVEL_*
-     *
-     * @return void
-     */
-    public function log($msg, $runlevel = XMPPHP_Log::LEVEL_INFO) {
-        $this->conn->getLog()->log($msg, $runlevel);
-    }
-
-    /**
      * Register a common id handler
      *
      * The result of the next IQ request will thrown a $event
@@ -94,8 +87,7 @@ class Xep
      */
     protected function addCommonHandler($event) {
         $nextid = $this->conn->getNextId();
-        if (!isset($this->conn->history[$nextid])) $this->conn->history[$nextid] = array();
-        $this->conn->history[$nextid]['expected'] = $event;
+        $this->conn->historySet($nextid, 'expected', $event);
         $this->conn->addIdHandler($nextid, 'handlerIdCommon', $this);
 
         return $this;
@@ -122,7 +114,7 @@ class Xep
                 $message['type']    = $error->attrs['type'];
                 $message['stanzas'] = array();
                 foreach ($error->subs as $sub) $message['stanzas'][] = $sub->name;
-                $this->log("ERROR : ({$error->attrs['code']}) {$error->attrs['type']} : " . implode(',', $message['stanzas']), XMPPHP_Log::LEVEL_ERROR);
+                $this->log("Receive error : ({$error->attrs['code']}) {$error->attrs['type']} : " . implode(',', $message['stanzas']), BbLogger::ERROR, 'Xep');
             }
             $res = new XepResponse($message, XepResponse::XEPRESPONSE_KO);
             // Send an event. Client should use this event to prevent listening forever
@@ -147,7 +139,8 @@ class Xep
             $res = $this->commonHandler($xml);
             if ($res->code != XepResponse::XEPRESPONSE_KO) {
                 $res->message = $xml->toString();
-                $this->conn->event($this->conn->history[$xml->attrs['id']]['expected'], $res);
+                $event        = $this->conn->historyGet($xml->attrs['id'], 'expected');
+                $this->conn->event($event, $res);
             }
         } catch (Exception $e) {
             $res = new XepResponse($e->getMessage(), XepResponse::XEPRESPONSE_KO);
@@ -168,25 +161,10 @@ class Xep
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
  */
-class XepResponse
+class XepResponse extends BbResponse
 {
-    public $code;
-    public $message;
-
     const XEPRESPONSE_OK = 200;
     const XEPRESPONSE_KO = 500;
-    /**
-     * Constructor
-     *
-     * @param mixed   $message the content of the response
-     * @param integer $code    ok or ko
-     *
-     * @return void
-     */
-    public function __construct($message = '', $code = 200){
-        $this->message = $message;
-        $this->code    = $code;
-    }
 }
 
 /**

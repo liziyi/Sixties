@@ -43,7 +43,8 @@ require_once dirname(__FILE__) . "/XMPP2.php";
  * @copyright  2008 Nathanael C. Fritz
  * @version    $Id$
  */
-class XMPPHP_BOSH extends XMPP2 {
+class XMPPHP_BOSH extends XMPP2
+{
 
         protected $rid;
         protected $sid;

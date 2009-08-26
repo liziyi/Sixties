@@ -18,12 +18,13 @@
  * along with Sixties; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
- * @category  Library
- * @package   Sixties
- * @author    Clochix <clochix@clochix.net>
- * @copyright 2009 Clochix.net
- * @license   http://www.gnu.org/licenses/gpl.txt GPL
- * @link      https://labo.clochix.net/projects/show/sixties
+ * @category   Library
+ * @package    Sixties
+ * @subpackage Xep
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @link       https://labo.clochix.net/projects/show/sixties
  */
 
 /**
@@ -42,6 +43,8 @@ require_once dirname(__FILE__) . "/Xep.php";
  * @license    http://www.gnu.org/licenses/gpl.txt GPL
  * @version    $Id$
  * @link       https://labo.clochix.net/projects/show/sixties
+ *
+ * @todo Handle <actions>
  */
 class XepCommand extends Xep
 {
@@ -177,17 +180,13 @@ class XepCommand extends Xep
             if ($res->code != XepResponse::XEPRESPONSE_KO) {
                 if ($xml->hasSub('command')) {
                     $command = $xml->sub('command');
-                    $tmp = '';
-                    foreach ($command->subs as $sub) {
-                        $tmp .= $sub->toString();
-                    }
                     $res->message = array(
                         'type'      => $xml->attrs['type'],
                         'node'      => $command->attrs['node'],
                         'action'    => $command->attrs['action'],
                         'sessionid' => $command->attrs['sessionid'],
                         'status'    => $command->attrs['status'],
-                        'form'      => $tmp
+                        'form'      => $command->toString()
                         );
                     $this->conn->event(self::EVENT_COMMAND, $res);
                 }
