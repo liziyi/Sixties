@@ -329,11 +329,20 @@ function BbXmpp(aBaseUrl, aContext){
         case 'light':
           // get nodes for pubsub
           var server;
-          $.get(_baseUrl+"disco/info", {}, function(res){
-            $.each(res.message.message, function(k,v){server=k;});
-            _host = 'pubsub.'+server;
-            _instance.discoServices(_host);
-          }, 'json');
+          $.ajax({
+            type: "GET",
+            url: _baseUrl+"disco/info",
+            dataType: "json",
+            data: {},
+            beforeSend: _beforeSend,
+            success: function(res){_handleResponse(res, function(res){
+                  $.each(res.message.message, function(k,v){server=k;});
+                  _host = 'pubsub.'+server;
+                  _instance.discoServices(_host);
+                }
+              );},
+            error: _ajaxErrorCallback
+          });
           break;
         default:
           break;
@@ -540,7 +549,7 @@ function BbXmpp(aBaseUrl, aContext){
             act += '<ul>';
             $.each(_handlers[node['node']], function(k2,handler){
               act += '<li>';
-              act += '<a class="array_action" title="Editer" onclick="gXmpp.handlerEdit('+handler.id+',\''+handler['class']+'\',\''+node.node+'\');"><span class="ui-icon ui-icon-pencil" /></a>';
+              act += '<a class="array_action" title="Editer" onclick="gXmpp.handlerEdit(\''+handler['class']+'\',\''+node.node+'\','+handler.id+');"><span class="ui-icon ui-icon-pencil" /></a>';
               act += '<a class="array_action" title="Supprimer" onclick="gXmpp.handlerDelete('+handler.id+');"><span class="ui-icon ui-icon-trash" /></a>';
               act += handler['class'];
               act += '</li>';
@@ -1564,6 +1573,7 @@ function BbXmpp(aBaseUrl, aContext){
         beforeSend: _beforeSend,
         success: function(res){
           _handleResponse(res, function(res2){
+            _handlers = {}
             $.each(res.message.message, function(k,v){if (!_handlers[v.node])_handlers[v.node]=[];_handlers[v.node].push(v);});
             _instance.renderNodeList();
           });
@@ -1613,7 +1623,7 @@ function BbXmpp(aBaseUrl, aContext){
    * @return {bbXmpp} this
    */
   this.handlerCreate2 = function handlerCreate2(aData) {
-    if (aData['form[class]'] !== '') _instance.handlerEdit(null, aData['form[class]'], aData['node']);
+    if (aData['form[class]'] !== '') _instance.handlerEdit(aData['form[class]'], aData['node']);
     return _instance;
   };
   /**
@@ -1635,7 +1645,7 @@ function BbXmpp(aBaseUrl, aContext){
       success: function(res){
       _handleResponse(res, function(res2){
         $('#main_form').empty().dialog('close');
-        _instance.renderNodeList();
+        _instance.handlerGetAll();
       },aData['id']?'Action updated':'Action created');
     },
       error: _ajaxErrorCallback,
@@ -1646,13 +1656,13 @@ function BbXmpp(aBaseUrl, aContext){
   /**
    * Display the handler edit form
    * 
-   * @param {String} aId    Handler id
    * @param {String} aClass Handler class
    * @param {String} aNode  Node
+   * @param {String} aId    Handler id
    * 
    * @return {bbXmpp} this
    */
-  this.handlerEdit = function handlerEdit(aId, aClass, aNode) {
+  this.handlerEdit = function handlerEdit(aClass, aNode, aId) {
     var loader = _createLoader('Retrieving action...');
     data = {};
     if (aId) data['id'] = aId;
@@ -1665,7 +1675,9 @@ function BbXmpp(aBaseUrl, aContext){
       beforeSend: _beforeSend,
       success: function(res){
         _handleResponse(res, function(res2){
-          _instance.formLoad(res.message.message, 'handlerSave', 'executing', {id: aId, 'class': aClass, node: aNode}, 'Edit action');
+          var formData = {'class': aClass, node: aNode};
+          if (aId) formData['id'] = aId;
+          _instance.formLoad(res.message.message, 'handlerSave', 'executing', formData, 'Edit action');
         });
       },
       error: _ajaxErrorCallback,
@@ -1691,7 +1703,7 @@ function BbXmpp(aBaseUrl, aContext){
       beforeSend: _beforeSend,
       success: function(res){
         _handleResponse(res, function(res2){
-          $.each(_handlers, function(k,v){if (v.id==aId) delete _handlers[k];});
+          _instance.handlerGetAll();
           _instance.renderNodeList();
         });
       },
