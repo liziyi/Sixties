@@ -36,14 +36,27 @@ require_once $basepath . '/lib/bb/BbCommon.php';
  * Define a new UrlMap annotation to map parameters in the url with parameters of the method
  */
 require_once $basepath . '/lib/vendors/addendum/annotations.php';
+
+/**
+ * UrlMap : class used for annotations
+ *
+ * @category   Library
+ * @package    Sixties
+ * @subpackage WebService
+ * @author     Clochix <clochix@clochix.net>
+ * @copyright  2009 Clochix.net
+ * @license    http://www.gnu.org/licenses/gpl.txt GPL
+ * @version    $Id$
+ * @link       https://labo.clochix.net/projects/show/sixties
+ */
 class UrlMap extends Annotation {}
 
 /**
  * BbRest : base for RESTful web services
  *
- * @category   WS
+ * @category   Library
  * @package    Sixties
- * @subpackage Rest
+ * @subpackage WebService
  * @author     Clochix <clochix@clochix.net>
  * @copyright  2009 Clochix.net
  * @license    http://www.gnu.org/licenses/gpl.txt GPL
@@ -76,7 +89,10 @@ class BbRest extends BbBase
     public $format = 'xml';
 
     /**
-     * Initialize object
+     * Constructor
+     *
+     * @param array $mapping hashmap of path => class name
+     * @param array $config  hasmap of server configuration options
      *
      * @return void
      */
@@ -85,25 +101,29 @@ class BbRest extends BbBase
         $this->_mapping = (is_array($mapping) ? $mapping : array());
         $this->_config  = (is_array($config) ? $config : array());
         // content negociation
-        $this->format = 'xml'; // Default format is XML
-        $accepted = explode(',', $_SERVER["HTTP_ACCEPT"]);
-        foreach ($accepted as $format) {
-            $tmp = explode(';', $format);
-            $format = trim(strtolower($format));
-            if ($format == 'text/xml') {
-                $this->format = 'xml';
-                break;
-            } elseif ($format == 'application/json') {
-                $this->format = 'json';
-                break;
+        if (isset($_GET['callback'])) {
+            // JSONP call, must return JSON
+            $this->format = 'json';
+        } else {
+            $this->format = 'xml'; // Default format is XML
+            $accepted = explode(',', $_SERVER["HTTP_ACCEPT"]);
+            foreach ($accepted as $format) {
+                $tmp = explode(';', $format);
+                $format = trim(strtolower($format));
+                if ($format == 'text/xml') {
+                    $this->format = 'xml';
+                    break;
+                } elseif ($format == 'application/json') {
+                    $this->format = 'json';
+                    break;
+                }
             }
         }
     }
-
     /**
      * Update the current configuration
      *
-     * @params mixed $config the new configuration
+     * @param array $config the new configuration
      *
      * @return BbRest $this
      */
@@ -111,7 +131,6 @@ class BbRest extends BbBase
         $this->_config = $config;
         return $this;
     }
-
     /**
      * Handle a request
      *
@@ -119,7 +138,7 @@ class BbRest extends BbBase
      */
     public function handle() {
         try {
-            $request = substr(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), strlen(dirname($_SERVER['PHP_SELF'])) + 1);
+            $request = substr(parse_url('http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], PHP_URL_PATH), strlen(dirname($_SERVER['PHP_SELF'])) + 1);
             $path    = explode('/', $request);
             $method  = ucFirst(strtolower($_SERVER['REQUEST_METHOD']));
             if (count($path) == 1 && strlen($path[0]) == 0) {
@@ -163,6 +182,13 @@ class BbRest extends BbBase
                     return false;
                 }
             }
+            // Get the method name
+            if (isset($_GET['callback']) && isset($_GET['__method'])) {
+                // hack for jsonp call : use __method parameter as method
+                $method = ucFirst(strtolower($_GET['__method']));
+                unset($args['__method']);
+            }
+
             // for generic methods
             if (count($path) == 1) $path[1] = '';
             $methodname = $path[1] . $method;
@@ -214,6 +240,9 @@ class BbRest extends BbBase
     /**
      * Render the anwser
      *
+     * @param mixed  $content content to send to client
+     * @param string $code    HTTP response code
+     *
      * @return void
      */
     public function renderResponse($content, $code = self::HTTP_OK) {
@@ -222,8 +251,10 @@ class BbRest extends BbBase
         switch ($this->format) {
         case 'xml':
             @header("Content-Type: text/xml;");
-            $res = sprintf('<?xml version="1.0" encoding="UTF-8"?><response><code>%d</code><message>%s</message></response>',
-                        $code, self::_xmlise($content));
+            $res = sprintf(
+                '<?xml version="1.0" encoding="UTF-8"?><response><code>%d</code><message>%s</message></response>',
+                $code, self::_xmlise($content)
+            );
             echo $res;
             break;
         case 'json':
@@ -231,7 +262,12 @@ class BbRest extends BbBase
             $res = new StdClass();
             $res->code    = $code;
             $res->message = $content;
-            echo json_encode($res);
+            // for jsonp call
+            if (isset($_GET['callback'])) {
+                echo $_GET['callback'].'('.json_encode($res).');';
+            } else {
+                echo json_encode($res);
+            }
             break;
         default:
             echo "Unknown format " . $this->format;
@@ -242,7 +278,7 @@ class BbRest extends BbBase
     /**
      * Serialize an object into XML
      *
-     * @param mixed $object : array or object
+     * @param mixed $obj : array or object
      *
      * @return string
      */
