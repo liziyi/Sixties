@@ -361,6 +361,66 @@ class WsXepPubsub extends WsXep
             ->addField(new XepFormField('Id', $uuid, XepFormField::FIELD_TYPE_TEXTSINGLE, true, 'Id'));
         return new WsResponse(array('form' => (string)$form), WsResponse::OK);
     }
+    /**
+     * Publish an atom compliant content
+     *
+     * Parameters:
+     * - node (required)
+     * - title (required)
+     * - content
+     * - summary
+     * - href[]
+     * - hreftype[]
+     * - hreflang[]
+     * - category
+     * - rights
+     *
+     * @param array $params parameters
+     *
+     * @return WsResponse|XepResponse
+     */
+    public function atomPost($params) {
+        $this->checkparams(array('node'), $params);
+        $id = 'tag:' . $this->params['host'] . ',' . date("Y-m-d") . ':' . $params['node'] . '/' . urlencode($params['title']);
+
+        // Required fields
+        $atom = sprintf('<id><![CDATA[%s]]></id><title><![CDATA[%s]]></title><updated><![CDATA[%s]]></updated>', $id, $params['title'], date('c'));
+
+        // Author : current user
+        $atom .= sprintf('<author><name>%s</name><email>%s</email></author>', $this->params['user'], $this->params['user'] . '@' . $this->params['host']);
+
+        // Content and summary
+        if (!empty($params['content'])) $atom .= "<content><![CDATA[{$params['content']}]]></content>";
+        if (!empty($params['summary'])) $atom .= "<summary><![CDATA[{$params['summary']}]]></summary>";
+
+        // Links
+        foreach ($params['href'] as $k => $href) {
+            if (!empty($href)) {
+                $link = " href=\"$href\" ";
+                if (!empty($params['hreftitle'][$k])) $link .= " title=\"{$params['hreftitle'][$k]}\" ";
+                if (!empty($params['hreftype'][$k])) $link .= " type=\"{$params['hreftype'][$k]}\" ";
+                if (!empty($params['hreflang'][$k])) $link .= " hreflang=\"{$params['hreflang'][$k]}\" ";
+                $atom .= "<link $link />";
+            }
+        }
+
+        // categories
+        $categories = explode(',', $params['category']);
+        foreach ($categories as $category) {
+            $category = trim($category);
+            if (!empty($category)) $atom .= "<category term=\"$category\" />";
+        }
+
+        if (!empty($params['rights'])) $atom .= "<content><![CDATA[{$params['rights']}]]></content>";
+
+        //@TODO : add source
+
+        $atom = '<entry xmlns="http://www.w3.org/2005/Atom">' . $atom . '</entry>';
+
+        $this->conn->xep('pubsub')->itemPublish(null, $params['node'], $atom, $id);
+        return $this->process(XepPubsub::EVENT_ITEM_PUBLISHED);
+        //return new WsResponse($atom, WsResponse::OK);
+    }
 
     /**
      * Get a pretty but sad and not RFC 4122 compliant UUID
