@@ -77,9 +77,9 @@ class HubHandlerJabber extends HubHandler
      */
     public function handle($event) {
         $conn = XMPP2::quickConnect($this->jid . '/' . uniqid('HubBot'), $this->password);
-        $conn->loggerSet(BbLogger::get('/tmp/xmpp4.log', BbLogger::DEBUG));
+        $this->log(sprintf("Send message from %s to %s : %s", $this->jid, $this->params['to'], $this->params['subject']), BbLogger::DEBUG, 'hub');
         $conn->message($this->params['to'], $event, 'normal', $this->params['subject'], $event);
-        $conn->processTime(5);
+        $conn->disconnect();
         return $this;
     }
 

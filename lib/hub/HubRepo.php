@@ -66,6 +66,7 @@ class HubRepo extends BbBase
             $this->dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         } catch (Exception $e) {
             $this->log("Error connecting to repository : " . $e->getMessage(), BbLogger::ERROR, 'HubRepo');
+            throw new Exception("Internal error when connecting to repository : " . $e->getMessage());
         }
     }
 

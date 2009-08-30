@@ -156,7 +156,7 @@ class Hub extends BbBase
      */
     public function process($timeout = null) {
         try {
-            $end  = ($timeout !== null ? time() + $timeout : time() + 3600);
+            $end  = ($timeout !== null ? time() + $timeout : time() + 86400);
             $ping = time() + $this->pingTimeout; // date of next ping
             // Main loop
             while (time() < $end) {
@@ -165,17 +165,20 @@ class Hub extends BbBase
                         // use a 0 timeout, so it doesn't depend on the number of connections. We will sleep later
                         $events = $conn['conn']->processUntil(
                             array(
-                                XepPubSub::EVENT_NOTIF_COLLECTION,
-                                XepPubSub::EVENT_NOTIF_CONFIG,
-                                XepPubSub::EVENT_NOTIF_DELETE,
+                                //XepPubSub::EVENT_NOTIF_COLLECTION,
+                                //XepPubSub::EVENT_NOTIF_CONFIG,
+                                //XepPubSub::EVENT_NOTIF_DELETE,
                                 XepPubSub::EVENT_NOTIF_ITEMS,
-                                XepPubSub::EVENT_NOTIF_PURGE,
-                                XepPubSub::EVENT_NOTIF_SUBSCRIPTION),
-                            0.01 // the timeout : don't wait if there's nothing new
+                                //XepPubSub::EVENT_NOTIF_PURGE,
+                                //XepPubSub::EVENT_NOTIF_SUBSCRIPTION
+                            ),
+                            0.1 // the timeout : don't wait if there's nothing new
                         );
                         if (count($events) > 0) {
                             // new events are available
                             $this->log("New messages for $jid", BbLogger::INFO, 'hub');
+
+                            // process each new event
                             foreach ($events as $event) {
                                 try {
                                     $this->log("Message for $jid : {$event[1]->message}", BbLogger::DEBUG, 'hub');
@@ -184,41 +187,50 @@ class Hub extends BbBase
                                     if (is_object($payload)) {
                                         $node  = (string)$payload->items[0]['node'];
                                         // Search a handler for the node or an ancestor
-                                        $found = isset($conn['handlers'][$node]);
-                                        $pos   = strrpos($node, '/');
-                                        while (!$found && $pos !== false) {
-                                            $node  = substr($node, 0, $pos);
-                                            $found = isset($conn['handlers'][$node]);
-                                            $pos   = strrpos($node, '/');
-                                        }
-                                        if ($found) {
-                                            foreach ($payload->items[0] as $item) {
-                                                foreach ($conn['handlers'][$node] as $handler) {
-                                                    // Fork and handle items in child processes
-                                                    $pid = pcntl_fork();
-                                                    if ($pid == -1) {
-                                                        // fork unsuccess, handle the event ourself
-                                                        $this->log("Hub was enable to fork", BbLogger::ERROR, 'hub');
-                                                        $handler->handle($item->asXML());
-                                                    } elseif ($pid == 0) {
-                                                        $this->log("Child process started", BbLogger::DEBUG, 'hub');
-                                                        try {
-                                                            // child process : handle the event
-                                                            $this->log(sprintf("Handling event with handler %d (%s)", $handler->getId(), $handler->getHandler()), BbLogger::DEBUG, 'Hub');
+                                        $nbfound = 0;
+                                        $found   = isset($conn['handlers'][$node]);
+                                        $pos     = strrpos($node, '/');
+                                        $this->log(sprintf("Handler for %s : %s", $node, ($found?'found':'not found')), BbLogger::DEBUG, 'hub');
+                                        while ($found || ($pos !== false && $pos > 0)) {
+                                            if ($found) {
+                                                // handler found, call it
+                                                $nbfound++;
+                                                foreach ($payload->items[0] as $item) {
+                                                    foreach ($conn['handlers'][$node] as $handler) {
+                                                        // Fork and handle items in child processes
+                                                        $pid = pcntl_fork();
+                                                        if ($pid == -1) {
+                                                            // fork unsuccess, handle the event ourself
+                                                            $this->log("Hub was enable to fork", BbLogger::ERROR, 'hub');
                                                             $handler->handle($item->asXML());
-                                                            $this->log(sprintf("Handling ok with handler %d (%s)", $handler->getId(), $handler->getHandler()), BbLogger::DEBUG, 'Hub');
-                                                        } catch (Exception $e) {
-                                                            $this->log("Error handling event for $jid " . $e->getMessage(), BbLogger::ERROR, 'Hub');
+                                                        } elseif ($pid == 0) {
+                                                            $this->log("Child process started", BbLogger::DEBUG, 'hub');
+                                                            try {
+                                                                // child process : handle the event
+                                                                $this->log(sprintf("Handling event with handler %d (%s)", $handler->getId(), $handler->getHandler()), BbLogger::DEBUG, 'Hub');
+                                                                $handler->handle($item->asXML());
+                                                                $this->log(sprintf("Handling ok with handler %d (%s)", $handler->getId(), $handler->getHandler()), BbLogger::DEBUG, 'Hub');
+                                                            } catch (Exception $e) {
+                                                                $this->log("Error handling event for $jid " . $e->getMessage(), BbLogger::ERROR, 'Hub');
+                                                            }
+                                                            $this->log("Child process exciting", BbLogger::DEBUG, 'hub');
+                                                            // Exit is not enought to end the child process, so suicide it
+                                                            posix_kill(posix_getpid(),  SIGKILL);
+                                                        } else {
+                                                            $this->log("I'm the father of $pid", BbLogger::DEBUG, 'hub');
+                                                            // parent process, nothing to do
                                                         }
-                                                        $this->log("Child process exciting", BbLogger::DEBUG, 'hub');
-                                                        exit;
-                                                    } else {
-                                                        // parent process, nothing to do
                                                     }
                                                 }
                                             }
-                                        } else {
-                                            $this->log("No handlers for node $node for $jid", BbLogger::WARNING, 'hub');
+                                            // Are there handlers for parents nodes ?
+                                            $node  = substr($node, 0, $pos);
+                                            $found = isset($conn['handlers'][$node]);
+                                            $this->log(sprintf("Handler for %s : %s", $node, ($found?'found':'not found')), BbLogger::DEBUG, 'hub');
+                                            $pos   = strrpos($node, '/');
+                                        }
+                                        if ($nbfound == 0) {
+                                            $this->log("No handlers for node {$payload->items[0]['node']} for $jid", BbLogger::WARNING, 'hub');
                                         }
                                     } else {
                                         $this->log("Bad payload : " . $event[1]->message, BbLogger::ERROR, 'hub');
@@ -231,9 +243,12 @@ class Hub extends BbBase
                     } catch (Exception $e) {
                         $this->log("Error getting notifications for $jid " . $e->getMessage(), BbLogger::ERROR, 'hub');
                     }
+                    //$conn['conn']->presence('HubBot', 'available', null, 'available', 99);
                 }
-                $conn['conn']->presence('HubBot', 'available', null, 'available', 99);
-                echo '+';
+                //$status = 0;
+                //$this->log("Waiting the children", BbLogger::DEBUG, 'hub');
+                //pcntl_waitpid(0, $status);
+                //$this->log("All children are dead, RIP", BbLogger::DEBUG, 'hub');
                 // sleep for 5000ms
                 usleep(5000000);
 
@@ -248,10 +263,14 @@ class Hub extends BbBase
                 }
                 echo '.';
             }
+            $this->log("Timeout occured, disconnecting", BbLogger::INFO, 'hub');
             // End : disconnect
             foreach ($this->conns as $jid => $conn) {
                 $conn['conn']->disconnect();
             }
+            $usage = getrusage();
+            $this->log(sprintf("Memory : %s Time : u%s-s%s", $usage["ru_maxrss"],  $usage["ru_utime.tv_sec"], $usage["ru_stime.tv_sec"]), BbLogger::INFO, 'hub');
+            $this->log("Bye, hope to see you soon", BbLogger::INFO, 'hub');
         } catch (Exception $e) {
             $this->log("Error in hub main loop " . $e->getMessage(), BbLogger::ERROR, 'hub');
         }
