@@ -1,25 +1,25 @@
 <?php
 /**
- * This file is part of Sixties, a set of PHP classes for playing with XMPP PubSub
+ * This file is part of Bb36, a set of PHP classes by Clochix.net
  *
  * Copyright (C) 2009  Clochix.net
  *
- * Sixties is free software; you can redistribute it and/or modify
+ * Bb36 is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * Sixties is distributed in the hope that it will be useful,
+ * Bb36 is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with Sixties; if not, write to the Free Software
+ * along with Bb36; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  * @category   Library
- * @package    Sixties
+ * @package    Bb36
  * @subpackage Common
  * @author     Clochix <clochix@clochix.net>
  * @copyright  2009 Clochix.net
@@ -32,7 +32,7 @@
  * BbBase : Base class
  *
  * @category   Library
- * @package    Sixties
+ * @package    Bb36
  * @subpackage Common
  * @author     Clochix <clochix@clochix.net>
  * @copyright  2009 Clochix.net
@@ -52,7 +52,8 @@ abstract class BbBase
      *
      * @return void
      */
-    public function __construct() {
+    public function __construct()
+    {
         // Init the logger
         $this->_logger = bbLogger::get();
     }
@@ -64,7 +65,8 @@ abstract class BbBase
      *
      * @return BbBase this
      */
-    public function loggerSet(BbLogger $logger) {
+    public function loggerSet(BbLogger $logger)
+    {
         $this->_logger = $logger;
         return $this;
     }
@@ -74,7 +76,8 @@ abstract class BbBase
      *
      * @return BbLogger
      */
-    public function loggerGet() {
+    public function loggerGet()
+    {
         return $this->_logger;
     }
 
@@ -87,9 +90,13 @@ abstract class BbBase
      *
      * @return BbBase this
      */
-    public function log($message, $severity = BbLogger::INFO, $context = '') {
-        if ($this->_logger) $this->_logger->log($message, $severity, $context);
-        else var_dump($message);
+    public function log($message, $severity = BbLogger::INFO, $context = '')
+    {
+        if ($this->_logger) {
+            $this->_logger->log($message, $severity, $context);
+        } else {
+            var_dump($message);
+        }
         return $this;
     }
 }
@@ -98,7 +105,7 @@ abstract class BbBase
  * BbLogger : logger
  *
  * @category   Library
- * @package    Sixties
+ * @package    Bb36
  * @subpackage Common
  * @author     Clochix <clochix@clochix.net>
  * @copyright  2009 Clochix.net
@@ -143,7 +150,8 @@ class BbLogger
      *
      * @return void
      */
-    protected function __construct($path = 'php://output', $level = BbLogger::WARNING) {
+    protected function __construct($path = 'php://output', $level = BbLogger::WARNING)
+    {
         $this->_logPath = $path;
         $this->_level   = $level;
 
@@ -180,9 +188,11 @@ class BbLogger
      *
      * @return BbLogger this
      */
-    public function log($message, $level = BbLogger::INFO, $context = '') {
+    public function log($message, $level = BbLogger::INFO, $context = '')
+    {
         if ($level <= $this->_level) {
-            $res = sprintf("[%s][%s][%s] %s", date('c'), $this->labels[$level], $context, $message);
+            list($usec, $sec) = explode(" ", microtime());
+            $res = sprintf("[%s.%s][%s][%s][%d] %s", date('c', $sec), $usec, $this->labels[$level], $context, posix_getpid(), $message);
             file_put_contents($this->_logPath, $res . "\n", FILE_APPEND);
         }
         return $this;
@@ -194,7 +204,7 @@ class BbLogger
  * BbResponse : Base class for responses
  *
  * @category   Library
- * @package    Sixties
+ * @package    Bb36
  * @subpackage Common
  * @author     Clochix <clochix@clochix.net>
  * @copyright  2009 Clochix.net
@@ -215,7 +225,8 @@ abstract class BbResponse
      *
      * @return void
      */
-    public function __construct($message = '', $code = 200){
+    public function __construct($message = '', $code = 200)
+    {
         $this->message = $message;
         $this->code    = $code;
     }
